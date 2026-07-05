@@ -4,3 +4,12 @@
   pod_annotations = ["io.katacontainers.*"]
 [plugins."io.containerd.cri.v1.runtime".containerd.runtimes.kata.options]
   ConfigPath = "/usr/local/share/kata-containers/configuration.toml"
+
+# Codewire commodity parity: expose the same handler name the RKE2/csrke2-dev
+# profile uses (`kata-clh`). Same Cloud-Hypervisor config, standard Kata shim.
+[plugins."io.containerd.cri.v1.runtime".containerd.runtimes.kata-clh]
+  runtime_type = "io.containerd.kata.v2"
+  privileged_without_host_devices = true
+  pod_annotations = ["io.katacontainers.*"]
+[plugins."io.containerd.cri.v1.runtime".containerd.runtimes.kata-clh.options]
+  ConfigPath = "/usr/local/share/kata-containers/configuration.toml"
