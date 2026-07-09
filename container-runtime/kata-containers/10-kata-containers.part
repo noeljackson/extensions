@@ -13,3 +13,14 @@
   pod_annotations = ["io.katacontainers.*"]
 [plugins."io.containerd.cri.v1.runtime".containerd.runtimes.kata-clh.options]
   ConfigPath = "/usr/local/share/kata-containers/configuration.toml"
+
+# Codewire confidential proof parity: expose the same handler name the
+# RKE2/csrke2-dev profile uses (`kata-qemu-snp`). This uses the QEMU-SNP
+# configuration and static payload installed under the Talos extension
+# /usr/local layout.
+[plugins."io.containerd.cri.v1.runtime".containerd.runtimes.kata-qemu-snp]
+  runtime_type = "io.containerd.kata-qemu-snp.v2"
+  privileged_without_host_devices = true
+  pod_annotations = ["io.katacontainers.*"]
+[plugins."io.containerd.cri.v1.runtime".containerd.runtimes.kata-qemu-snp.options]
+  ConfigPath = "/usr/local/share/kata-containers/configuration-qemu-snp.toml"
