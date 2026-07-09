@@ -3,6 +3,14 @@ variant: scratch
 shell: /bin/bash
 dependencies:
   - stage: base
+  - stage: fuse3
+    from: /rootfs/
+    to: /rootfs/
+  - stage: glibc
+    from: /rootfs/
+    to: /rootfs/usr/local/lib/containers/nydus-for-kata-tee/
+  - image: ghcr.io/noeljackson/kata-deploy-codewire@sha256:a02db0ba8179347258c7e601f3f7366cd55fa2e6bff9f5f90e67905ba5aacaf7
+    from: /opt/kata-artifacts/nydus-snapshotter
 steps:
   - sources:
     # {{ if eq .ARCH "aarch64" }} This in fact is YAML comment, but Go templating instruction is evaluated by bldr
@@ -54,13 +62,28 @@ steps:
         cp ./opt/kata/share/kata-containers/vmlinux.container /rootfs/usr/local/share/kata-containers/vmlinux.container
 
         # Codewire confidential proof parity: install the QEMU-SNP payload
-        # under the Talos extension /usr/local layout. The wrapper adds QEMU's
-        # data directory explicitly because the static binary is built from
-        # Kata's upstream /opt/kata payload.
+        # and nydus-for-Kata-TEE snapshotter under the Talos extension
+        # /usr/local layout. Talos does not ship /bin/sh, so the Kata config
+        # must point at a static wrapper that execs the real QEMU binary with
+        # its data directory.
         mkdir -p /rootfs/usr/local/{bin,lib,libexec,share/kata-containers,share/ovmf,share/kata-qemu-snp-experimental}
         cp ./opt/kata/bin/qemu-system-x86_64-snp-experimental /rootfs/usr/local/libexec/
         cp -a ./opt/kata/lib/kata-qemu-snp-experimental /rootfs/usr/local/lib/
         cp -a ./opt/kata/share/kata-qemu-snp-experimental/qemu /rootfs/usr/local/share/kata-qemu-snp-experimental/
+        CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' \
+          -o /rootfs/usr/local/bin/qemu-system-x86_64-snp-experimental \
+          /pkg/qemu-snp-wrapper.go
+        mkdir -p /rootfs/usr/local/lib/containers/nydus-for-kata-tee
+        cp /containerd-nydus-grpc /rootfs/usr/local/lib/containers/nydus-for-kata-tee/
+        cp /nydus-overlayfs /rootfs/usr/local/lib/containers/nydus-for-kata-tee/
+        cp /nydus-overlayfs /rootfs/usr/local/bin/nydus-overlayfs
+        CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' \
+          -o /rootfs/usr/local/bin/mount.fuse \
+          /pkg/mount-fuse-nydus-wrapper.go
+        cp /pkg/config-guest-pulling.toml /rootfs/usr/local/lib/containers/nydus-for-kata-tee/config-guest-pulling.toml
+        chmod 0755 /rootfs/usr/local/lib/containers/nydus-for-kata-tee/containerd-nydus-grpc
+        chmod 0755 /rootfs/usr/local/lib/containers/nydus-for-kata-tee/nydus-overlayfs
+        chmod 0755 /rootfs/usr/local/bin/nydus-overlayfs
         cp ./opt/kata/share/defaults/kata-containers/configuration-qemu-snp.toml /rootfs/usr/local/share/kata-containers/
         cp ./opt/kata/share/ovmf/AMDSEV.fd /rootfs/usr/local/share/ovmf/
         cp ./opt/kata/share/kata-containers/kata-containers-confidential.img /rootfs/usr/local/share/kata-containers/
@@ -69,16 +92,11 @@ steps:
         cp ./opt/kata/share/kata-containers/vmlinuz.container /rootfs/usr/local/share/kata-containers/
         cp ./opt/kata/share/kata-containers/vmlinuz-6.18.35-197 /rootfs/usr/local/share/kata-containers/
 
-        cat > /rootfs/usr/local/bin/qemu-system-x86_64-snp-experimental <<'EOF'
-        #!/bin/sh
-        exec /usr/local/libexec/qemu-system-x86_64-snp-experimental -L /usr/local/share/kata-qemu-snp-experimental/qemu "$@"
-        EOF
-        chmod 0755 /rootfs/usr/local/bin/qemu-system-x86_64-snp-experimental
-
         sed -i \
           -e 's#/opt/kata#/usr/local#g' \
           -e 's#path = "/usr/local/bin/qemu-system-x86_64"#path = "/usr/local/bin/qemu-system-x86_64-snp-experimental"#' \
           -e 's#valid_hypervisor_paths = \["/usr/local/bin/qemu-system-x86_64"\]#valid_hypervisor_paths = ["/usr/local/bin/qemu-system-x86_64-snp-experimental"]#' \
+          -e 's#shared_fs = "virtio-fs"#shared_fs = "none"#' \
           -e 's#create_container_timeout = 60#create_container_timeout = 180#' \
           /rootfs/usr/local/share/kata-containers/configuration-qemu-snp.toml
       - |
@@ -88,6 +106,9 @@ steps:
       - |
         mkdir -p /rootfs/etc/cri/conf.d
         cp /pkg/10-kata-containers.part /rootfs/etc/cri/conf.d/10-kata-containers.part
+
+        mkdir -p /rootfs/usr/local/etc/containers
+        cp /pkg/nydus-for-kata-tee.yaml /rootfs/usr/local/etc/containers/nydus-for-kata-tee.yaml
 
         mkdir -p /rootfs/usr/local/share/kata-containers
         cp /pkg/configuration.toml /rootfs/usr/local/share/kata-containers/
