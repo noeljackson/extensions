@@ -6,6 +6,13 @@ See [Installing Extensions](https://github.com/siderolabs/extensions#installing-
 
 ## Usage
 
+This fork exposes the Codewire runtime handler names used by the dev runtime
+profiles:
+
+- `kata-clh` uses the Cloud Hypervisor configuration for commodity workloads.
+- `kata-qemu-snp` uses the QEMU-SNP configuration, the SNP experimental QEMU
+  binary, AMD SEV firmware, and the confidential guest image.
+
 ## Testing
 
 Apply the following manifest to run nginx pod using Kata Containers:
