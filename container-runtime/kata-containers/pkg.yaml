@@ -114,6 +114,8 @@ steps:
         cp /pkg/configuration.toml /rootfs/usr/local/share/kata-containers/
     test:
       - |
+        grep -Eq '^enable_annotations = \[.*"cc_init_data".*\]$' \
+          /rootfs/usr/local/share/kata-containers/configuration.toml
         mkdir -p /extensions-validator-rootfs
         cp -r /rootfs/ /extensions-validator-rootfs/rootfs
         cp /pkg/manifest.yaml /extensions-validator-rootfs/manifest.yaml
