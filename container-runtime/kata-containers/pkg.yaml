@@ -18,16 +18,24 @@ steps:
         destination: kata-static.tar.zst
         sha256: {{ .KATA_CONTAINERS_STATIC_ARM64_SHA256 }}
         sha512: {{ .KATA_CONTAINERS_STATIC_ARM64_SHA512 }}
+      - url: https://github.com/cloud-hypervisor/cloud-hypervisor/releases/download/{{ .CLOUD_HYPERVISOR_VERSION }}/cloud-hypervisor-static-aarch64
+        destination: cloud-hypervisor-static
+        sha256: {{ .CLOUD_HYPERVISOR_STATIC_ARM64_SHA256 }}
+        sha512: {{ .CLOUD_HYPERVISOR_STATIC_ARM64_SHA512 }}
     # {{ else }} This in fact is YAML comment, but Go templating instruction is evaluated by bldr
       - url: https://github.com/kata-containers/kata-containers/releases/download/{{ .KATA_CONTAINERS_VERSION }}/kata-static-{{ .KATA_CONTAINERS_VERSION }}-amd64.tar.zst
         destination: kata-static.tar.zst
         sha256: {{ .KATA_CONTAINERS_STATIC_AMD64_SHA256 }}
         sha512: {{ .KATA_CONTAINERS_STATIC_AMD64_SHA512 }}
+      - url: https://github.com/cloud-hypervisor/cloud-hypervisor/releases/download/{{ .CLOUD_HYPERVISOR_VERSION }}/cloud-hypervisor-static
+        destination: cloud-hypervisor-static
+        sha256: {{ .CLOUD_HYPERVISOR_STATIC_AMD64_SHA256 }}
+        sha512: {{ .CLOUD_HYPERVISOR_STATIC_AMD64_SHA512 }}
     # {{ end }} This in fact is YAML comment, but Go templating instruction is evaluated by bldr
-      - url: https://github.com/kata-containers/kata-containers/archive/refs/tags/{{ .KATA_CONTAINERS_VERSION }}.tar.gz
+      - url: https://github.com/noeljackson/kata-containers/archive/{{ .KATA_CONTAINERS_SOURCE_REV }}.tar.gz
         destination: kata-containers.tar.gz
-        sha256: {{ .KATA_CONTAINERS_SHA256 }}
-        sha512: {{ .KATA_CONTAINERS_SHA512 }}
+        sha256: {{ .KATA_CONTAINERS_SOURCE_SHA256 }}
+        sha512: {{ .KATA_CONTAINERS_SOURCE_SHA512 }}
     env:
       GOPATH: /tmp/go
     cachePaths:
@@ -55,7 +63,7 @@ steps:
 
         mkdir -p /rootfs/usr/local/{bin,libexec,share/kata-containers}
 
-        cp ./opt/kata/bin/cloud-hypervisor /rootfs/usr/local/bin/
+        install -m 0755 ../cloud-hypervisor-static /rootfs/usr/local/bin/cloud-hypervisor
         cp ./opt/kata/libexec/virtiofsd /rootfs/usr/local/libexec/
 
         cp ./opt/kata/share/kata-containers/kata-containers.img /rootfs/usr/local/share/kata-containers/kata-containers.img
@@ -90,7 +98,12 @@ steps:
         cp ./opt/kata/share/kata-containers/kata-containers-initrd-confidential.img /rootfs/usr/local/share/kata-containers/
         cp ./opt/kata/share/kata-containers/root_hash_confidential.txt /rootfs/usr/local/share/kata-containers/
         cp ./opt/kata/share/kata-containers/vmlinuz.container /rootfs/usr/local/share/kata-containers/
-        cp ./opt/kata/share/kata-containers/vmlinuz-6.18.35-197 /rootfs/usr/local/share/kata-containers/
+        mapfile -t vmlinuz_candidates < <(find ./opt/kata/share/kata-containers -maxdepth 1 -type f -name 'vmlinuz-[0-9]*' | sort)
+        if [ "${#vmlinuz_candidates[@]}" -ne 1 ]; then
+          printf 'expected exactly one versioned vmlinuz, found %s\n' "${#vmlinuz_candidates[@]}" >&2
+          exit 1
+        fi
+        cp "${vmlinuz_candidates[0]}" /rootfs/usr/local/share/kata-containers/
 
         sed -i \
           -e 's#/opt/kata#/usr/local#g' \
