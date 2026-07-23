@@ -131,8 +131,18 @@ steps:
         cp /pkg/configuration.toml /rootfs/usr/local/share/kata-containers/
     test:
       - |
-        grep -Eq '^enable_annotations = \[.*"cc_init_data".*\]$' \
-          /rootfs/usr/local/share/kata-containers/configuration.toml
+        # Codewire renders these two hypervisor annotations for both runtime
+        # profiles. Keep the package-level assertion close to the files that
+        # containerd loads, rather than relying on an unannotated Kata smoke.
+        for config in \
+          /rootfs/usr/local/share/kata-containers/configuration.toml \
+          /rootfs/usr/local/share/kata-containers/configuration-qemu-snp.toml; do
+          annotations="$(sed -nE 's/^enable_annotations = (.*)$/\1/p' "$config")"
+          test -n "$annotations"
+          printf '%s\n' "$annotations" | grep -Fq '"cc_init_data"'
+          printf '%s\n' "$annotations" | grep -Fq '"kernel_params"'
+          ! printf '%s\n' "$annotations" | grep -Eq '"(\.\*|\*)"'
+        done
         mkdir -p /extensions-validator-rootfs
         cp -r /rootfs/ /extensions-validator-rootfs/rootfs
         cp /pkg/manifest.yaml /extensions-validator-rootfs/manifest.yaml

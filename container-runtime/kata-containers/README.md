@@ -13,9 +13,10 @@ profiles:
 - `kata-qemu-snp` uses the QEMU-SNP configuration, the SNP experimental QEMU
   binary, AMD SEV firmware, and the confidential guest image.
 
-Both configurations allow only the `cc_init_data` hypervisor annotation in
-addition to their upstream defaults. Codewire uses that standard Kata transport
-for guest Agent Policy; it does not enable a wildcard annotation surface.
+Both configurations retain the Codewire-required `cc_init_data` and
+`kernel_params` hypervisor annotations in addition to their upstream defaults.
+Codewire uses these standard Kata transports for Agent Policy and CoCo guest
+configuration; the package test rejects wildcard annotation patterns.
 
 The confidential handler also installs `nydus-for-kata-tee` and configures only
 `kata-qemu-snp` to use that snapshotter. Do not make nydus the global
