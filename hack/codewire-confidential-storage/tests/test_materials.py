@@ -287,6 +287,17 @@ class MaterialTests(unittest.TestCase):
                     LOCK_PATH, self.lock, "longhorn-manager", invalid
                 )
 
+            invalid_source, _ = self._write_oci_archive(
+                root / "invalid-source",
+                source_label="https://sources.suse.com/not-codewire",
+            )
+            with self.assertRaisesRegex(
+                materials.MaterialError, "org.opencontainers.image.source"
+            ):
+                materials.verify_oci_image(
+                    LOCK_PATH, self.lock, "longhorn-manager", invalid_source
+                )
+
     def test_build_recipe_has_no_publication_path(self) -> None:
         recipe = (SCRIPT_DIR / "build.sh").read_text(encoding="utf-8")
         self.assertNotIn(" --push", recipe)
@@ -295,6 +306,11 @@ class MaterialTests(unittest.TestCase):
         self.assertNotIn("--sbom=true", recipe)
         self.assertIn(".base_images.buildkit_sbom_scanner", recipe)
         self.assertEqual(recipe.count("type=sbom,generator=$(lock_value"), 2)
+        self.assertIn(
+            '--label "org.opencontainers.image.source=$(lock_value '
+            "'.sources.longhorn_manager.repository')\"",
+            recipe,
+        )
         self.assertIn('mode:"no-push"', recipe)
         self.assertIn(
             'built_tarball="$local_build/kata-static.tar.zst"',
@@ -343,7 +359,10 @@ class MaterialTests(unittest.TestCase):
         )
 
     def _write_oci_archive(
-        self, root: Path, source_lock_label: str | None = None
+        self,
+        root: Path,
+        source_lock_label: str | None = None,
+        source_label: str | None = None,
     ) -> tuple[Path, str]:
         layout = root / "layout"
         blobs = layout / "blobs" / "sha256"
@@ -367,6 +386,8 @@ class MaterialTests(unittest.TestCase):
                         "org.opencontainers.image.revision": self.lock["sources"][
                             "longhorn_manager"
                         ]["revision"],
+                        "org.opencontainers.image.source": source_label
+                        or self.lock["sources"]["longhorn_manager"]["repository"],
                     }
                 },
             }

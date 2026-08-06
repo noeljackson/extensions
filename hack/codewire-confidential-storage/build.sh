@@ -396,6 +396,7 @@ case "$command" in
       --attest "type=sbom,generator=$(lock_value '.base_images.buildkit_sbom_scanner')" \
       --build-arg "SOURCE_DATE_EPOCH=$(lock_value '.source_date_epoch')" \
       --label "org.opencontainers.image.revision=$(lock_value '.sources.longhorn_manager.revision')" \
+      --label "org.opencontainers.image.source=$(lock_value '.sources.longhorn_manager.repository')" \
       --label "io.codewire.source-lock.sha256=$(lock_sha256)" \
       --metadata-file "$output_dir/longhorn-manager.metadata.json" \
       --output "type=oci,dest=$output_dir/longhorn-manager.oci.tar,rewrite-timestamp=true" \

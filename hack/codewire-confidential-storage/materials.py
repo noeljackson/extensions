@@ -865,7 +865,10 @@ def verify_oci_image(
             expected_labels = {
                 "org.opencontainers.image.revision": lock["sources"][
                     "longhorn_manager"
-                ]["revision"]
+                ]["revision"],
+                "org.opencontainers.image.source": lock["sources"]["longhorn_manager"][
+                    "repository"
+                ],
             }
         else:
             expected_labels = {
