@@ -7,6 +7,7 @@ import argparse
 import contextlib
 import datetime as dt
 import hashlib
+import io
 import json
 import os
 import re
@@ -738,6 +739,87 @@ def write_json(path: Path, value: Any) -> None:
     )
 
 
+def verify_talos_extension_tree(root: Path) -> None:
+    if not root.is_dir():
+        raise MaterialError(f"Talos extension tree does not exist: {root}")
+    entries = {entry.name for entry in root.iterdir()}
+    expected = {"manifest.yaml", "rootfs"}
+    if entries != expected:
+        unexpected = sorted(entries - expected)
+        missing = sorted(expected - entries)
+        detail = []
+        if unexpected:
+            detail.append(f"unexpected entries {unexpected}")
+        if missing:
+            detail.append(f"missing entries {missing}")
+        raise MaterialError("invalid Talos extension tree: " + "; ".join(detail))
+
+    manifest = root / "manifest.yaml"
+    payload = root / "rootfs"
+    if manifest.is_symlink() or not manifest.is_file():
+        raise MaterialError("Talos extension manifest.yaml must be a regular file")
+    if payload.is_symlink() or not payload.is_dir():
+        raise MaterialError("Talos extension rootfs must be a directory")
+
+
+def verify_kata_extension_layer(data: bytes) -> None:
+    try:
+        with tarfile.open(fileobj=io.BytesIO(data), mode="r:*") as layer:
+            members = layer.getmembers()
+    except (OSError, tarfile.TarError) as error:
+        raise MaterialError(
+            f"Kata extension layer is not a readable tar: {error}"
+        ) from error
+
+    normalized = []
+    for member in members:
+        name = member.name.rstrip("/")
+        while name.startswith("./"):
+            name = name[2:]
+        if name.startswith("/") or ".." in name.split("/"):
+            raise MaterialError(
+                f"Kata extension layer contains unsafe path {member.name!r}"
+            )
+        normalized.append(name)
+    if len(normalized) != len(set(normalized)):
+        raise MaterialError("Kata extension layer contains duplicate paths")
+    top_level = {name.split("/", 1)[0] for name in normalized if name}
+    expected = {"manifest.yaml", "rootfs"}
+    if top_level != expected:
+        unexpected = sorted(top_level - expected)
+        missing = sorted(expected - top_level)
+        detail = []
+        if unexpected:
+            detail.append(f"unexpected entries {unexpected}")
+        if missing:
+            detail.append(f"missing entries {missing}")
+        raise MaterialError("invalid Kata Talos extension layer: " + "; ".join(detail))
+
+    by_name = {name: member for name, member in zip(normalized, members)}
+    manifest = by_name.get("manifest.yaml")
+    payload = by_name.get("rootfs")
+    if manifest is None or not manifest.isfile():
+        raise MaterialError("Kata extension manifest.yaml must be a regular file")
+    if payload is None or not payload.isdir():
+        raise MaterialError("Kata extension rootfs must be a directory")
+
+    required = {
+        "rootfs/usr/local/bin/containerd-shim-kata-v2",
+        "rootfs/usr/local/bin/containerd-shim-kata-qemu-snp-v2",
+        "rootfs/usr/local/share/codewire/confidential-storage/materials.spdx.json",
+        "rootfs/usr/local/share/codewire/confidential-storage/provenance.in-toto.json",
+        "rootfs/usr/local/share/kata-containers/configuration-qemu-snp.toml",
+        "rootfs/usr/local/share/kata-containers/kata-containers-confidential.img",
+        "rootfs/usr/local/share/kata-containers/kata-containers-initrd-confidential.img",
+        "rootfs/usr/local/share/kata-containers/root_hash_confidential.txt",
+    }
+    missing_payload = sorted(required - set(normalized))
+    if missing_payload:
+        raise MaterialError(
+            f"Kata extension layer lacks required payload {missing_payload}"
+        )
+
+
 def verify_oci_image(
     lock_path: Path, lock: dict[str, Any], component: str, archive: Path
 ) -> dict[str, Any]:
@@ -843,6 +925,44 @@ def verify_oci_image(
             )
 
         image_manifest = read_json_blob(image_digest)
+        image_layers = image_manifest.get("layers")
+        if not isinstance(image_layers, list):
+            raise MaterialError("OCI image manifest layers must be a list")
+        if component == "kata-extension":
+            if len(image_layers) != 1 or not isinstance(image_layers[0], dict):
+                raise MaterialError(
+                    "Kata extension must contain exactly one image layer"
+                )
+            layer_digest = image_layers[0].get("digest")
+            if image_layers[0].get("mediaType") not in {
+                "application/vnd.oci.image.layer.v1.tar",
+                "application/vnd.oci.image.layer.v1.tar+gzip",
+            }:
+                raise MaterialError("Kata extension layer media type is unsupported")
+            match = (
+                digest_pattern.fullmatch(layer_digest)
+                if isinstance(layer_digest, str)
+                else None
+            )
+            if match is None:
+                raise MaterialError("Kata extension layer digest is invalid")
+            layer_name = f"blobs/sha256/{match.group(1)}"
+            try:
+                layer_member = oci.getmember(layer_name)
+                layer_stream = oci.extractfile(layer_member)
+            except (KeyError, tarfile.TarError) as error:
+                raise MaterialError(
+                    f"OCI archive lacks Kata extension layer {layer_digest}"
+                ) from error
+            if not layer_member.isfile() or layer_stream is None:
+                raise MaterialError("Kata extension layer blob is not a file")
+            layer_data = layer_stream.read()
+            if hashlib.sha256(layer_data).hexdigest() != match.group(1):
+                raise MaterialError(
+                    f"Kata extension layer blob does not match {layer_digest}"
+                )
+            verify_kata_extension_layer(layer_data)
+
         config_descriptor = image_manifest.get("config")
         if not isinstance(config_descriptor, dict) or not isinstance(
             config_descriptor.get("digest"), str
@@ -898,11 +1018,13 @@ def verify_oci_image(
             for layer in layers
             if isinstance(layer, dict)
         }
-        required_predicates = {
-            "https://spdx.dev/Document",
+        if "https://spdx.dev/Document" not in predicate_types:
+            raise MaterialError("OCI image lacks embedded SPDX/SLSA attestations")
+        supported_slsa = {
             "https://slsa.dev/provenance/v0.2",
+            "https://slsa.dev/provenance/v1",
         }
-        if not required_predicates.issubset(predicate_types):
+        if len(predicate_types & supported_slsa) != 1:
             raise MaterialError("OCI image lacks embedded SPDX/SLSA attestations")
 
     return {
@@ -953,6 +1075,9 @@ def build_parser() -> argparse.ArgumentParser:
     verify_kata_parser = subparsers.add_parser("verify-prepared-kata")
     verify_kata_parser.add_argument("--repo", required=True, type=Path)
 
+    verify_extension_parser = subparsers.add_parser("verify-extension-tree")
+    verify_extension_parser.add_argument("--root", required=True, type=Path)
+
     prepare_longhorn_parser = subparsers.add_parser("prepare-longhorn")
     prepare_longhorn_parser.add_argument("--repo", required=True, type=Path)
     prepare_longhorn_parser.add_argument("--output", required=True, type=Path)
@@ -984,6 +1109,9 @@ def main() -> int:
         elif args.command == "verify-prepared-kata":
             verify_prepared_kata(lock, args.repo)
             print("prepared Kata source matches the confidential-storage contract")
+        elif args.command == "verify-extension-tree":
+            verify_talos_extension_tree(args.root)
+            print("Talos extension tree contains only manifest.yaml and rootfs")
         elif args.command == "prepare-longhorn":
             receipt = prepare_longhorn(args.lock, lock, args.repo, args.output)
             print(receipt)

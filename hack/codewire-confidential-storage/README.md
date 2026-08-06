@@ -28,8 +28,9 @@ does not consult mutable operating-system repositories.
 - add `dmsetup` beside the already required `cryptsetup-bin` and `e2fsprogs` in
   the measured guest rootfs, then prove `cryptsetup`, `dmsetup`, `mkfs.ext4`, and
   `resize2fs` exist in the resulting confidential image;
-- overlay only the exact confidential payload and exact runtime shim onto the
-  accepted Kata Talos extension base, preserving standard guest payloads;
+- export the accepted Kata Talos extension base through BuildKit without
+  container-runtime pseudo-files, require exactly `manifest.yaml` plus
+  `rootfs/`, and overlay the exact confidential payload inside that `rootfs/`;
 - build only the Dev SNP artifact closure (agent, CDH, kernel, SEV firmware,
   SNP QEMU, Go shim, and confidential image/initrd), excluding unrelated
   hypervisors and distro images from both failure scope and the final tarball;

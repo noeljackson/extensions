@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import importlib.util
+import io
 import json
 import subprocess
 import tarfile
@@ -298,6 +299,61 @@ class MaterialTests(unittest.TestCase):
                     LOCK_PATH, self.lock, "longhorn-manager", invalid_source
                 )
 
+            invalid_attestation, _ = self._write_oci_archive(
+                root / "invalid-attestation",
+                slsa_predicate="https://example.invalid/provenance",
+            )
+            with self.assertRaisesRegex(materials.MaterialError, "SPDX/SLSA"):
+                materials.verify_oci_image(
+                    LOCK_PATH,
+                    self.lock,
+                    "longhorn-manager",
+                    invalid_attestation,
+                )
+
+    def test_kata_extension_layout_rejects_runtime_metadata(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            valid, image_digest = self._write_oci_archive(
+                root / "valid", component="kata-extension"
+            )
+            subject = materials.verify_oci_image(
+                LOCK_PATH, self.lock, "kata-extension", valid
+            )
+            self.assertEqual(
+                subject,
+                {
+                    "name": "kata-extension@linux-amd64",
+                    "digest": {"sha256": image_digest},
+                },
+            )
+
+            invalid_entries = self._kata_extension_entries()
+            invalid_entries[".dockerenv"] = b""
+            invalid, _ = self._write_oci_archive(
+                root / "invalid",
+                component="kata-extension",
+                layer_entries=invalid_entries,
+            )
+            with self.assertRaisesRegex(
+                materials.MaterialError, "unexpected entries.*dockerenv"
+            ):
+                materials.verify_oci_image(
+                    LOCK_PATH, self.lock, "kata-extension", invalid
+                )
+
+    def test_talos_extension_tree_has_exact_top_level_contract(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "manifest.yaml").write_text("version: v1alpha1\n")
+            (root / "rootfs").mkdir()
+            materials.verify_talos_extension_tree(root)
+            (root / ".dockerenv").touch()
+            with self.assertRaisesRegex(
+                materials.MaterialError, "unexpected entries.*dockerenv"
+            ):
+                materials.verify_talos_extension_tree(root)
+
     def test_build_recipe_has_no_publication_path(self) -> None:
         recipe = (SCRIPT_DIR / "build.sh").read_text(encoding="utf-8")
         self.assertNotIn(" --push", recipe)
@@ -312,12 +368,15 @@ class MaterialTests(unittest.TestCase):
             recipe,
         )
         self.assertIn('mode:"no-push"', recipe)
+        self.assertNotIn("docker export", recipe)
+        self.assertNotIn("docker create", recipe)
+        self.assertIn("base-rootfs.Dockerfile", recipe)
+        self.assertIn('"$work_dir/context/extension/rootfs"', recipe)
         self.assertIn(
             'built_tarball="$local_build/kata-static.tar.zst"',
             recipe,
         )
         self.assertIn("\\( -type f -o -type l \\)", recipe)
-        self.assertIn('"$base_image" /bin/true', recipe)
         self.assertIn("rootfs-image-confidential-tarball", recipe)
         self.assertIn("rootfs-initrd-confidential-tarball", recipe)
         self.assertIn("qemu-snp-experimental-tarball", recipe)
@@ -363,33 +422,77 @@ class MaterialTests(unittest.TestCase):
         root: Path,
         source_lock_label: str | None = None,
         source_label: str | None = None,
+        component: str = "longhorn-manager",
+        layer_entries: dict[str, bytes | None] | None = None,
+        slsa_predicate: str = "https://slsa.dev/provenance/v1",
     ) -> tuple[Path, str]:
         layout = root / "layout"
         blobs = layout / "blobs" / "sha256"
         blobs.mkdir(parents=True)
 
-        def write_blob(value: dict) -> tuple[str, int]:
-            data = json.dumps(value, sort_keys=True, separators=(",", ":")).encode()
+        def write_blob_bytes(data: bytes) -> tuple[str, int]:
             digest = hashlib.sha256(data).hexdigest()
             (blobs / digest).write_bytes(data)
             return digest, len(data)
+
+        def write_blob(value: dict) -> tuple[str, int]:
+            data = json.dumps(value, sort_keys=True, separators=(",", ":")).encode()
+            return write_blob_bytes(data)
+
+        if component == "kata-extension":
+            layer_buffer = io.BytesIO()
+            with tarfile.open(fileobj=layer_buffer, mode="w") as layer:
+                for name, data in sorted(
+                    (layer_entries or self._kata_extension_entries()).items()
+                ):
+                    member = tarfile.TarInfo(name)
+                    if data is None:
+                        member.type = tarfile.DIRTYPE
+                        member.mode = 0o755
+                        layer.addfile(member)
+                    else:
+                        member.size = len(data)
+                        member.mode = 0o644
+                        layer.addfile(member, io.BytesIO(data))
+            layer_digest, layer_size = write_blob_bytes(layer_buffer.getvalue())
+            image_layers = [
+                {
+                    "mediaType": "application/vnd.oci.image.layer.v1.tar",
+                    "digest": f"sha256:{layer_digest}",
+                    "size": layer_size,
+                }
+            ]
+            labels = {
+                "io.codewire.source-lock.sha256": source_lock_label
+                or materials.lock_digest(LOCK_PATH),
+                "io.codewire.source.extensions": self.lock["sources"]["extensions"][
+                    "revision"
+                ],
+                "io.codewire.source.guest-components": self.lock["sources"][
+                    "guest_components"
+                ]["revision"],
+                "io.codewire.source.kata-containers": self.lock["sources"][
+                    "kata_containers"
+                ]["revision"],
+            }
+        else:
+            image_layers = []
+            labels = {
+                "io.codewire.source-lock.sha256": source_lock_label
+                or materials.lock_digest(LOCK_PATH),
+                "org.opencontainers.image.revision": self.lock["sources"][
+                    "longhorn_manager"
+                ]["revision"],
+                "org.opencontainers.image.source": source_label
+                or self.lock["sources"]["longhorn_manager"]["repository"],
+            }
 
         config_digest, config_size = write_blob(
             {
                 "architecture": "amd64",
                 "os": "linux",
                 "created": materials.iso_time(self.lock["source_date_epoch"]),
-                "config": {
-                    "Labels": {
-                        "io.codewire.source-lock.sha256": source_lock_label
-                        or materials.lock_digest(LOCK_PATH),
-                        "org.opencontainers.image.revision": self.lock["sources"][
-                            "longhorn_manager"
-                        ]["revision"],
-                        "org.opencontainers.image.source": source_label
-                        or self.lock["sources"]["longhorn_manager"]["repository"],
-                    }
-                },
+                "config": {"Labels": labels},
             }
         )
         image_digest, image_size = write_blob(
@@ -401,7 +504,7 @@ class MaterialTests(unittest.TestCase):
                     "digest": f"sha256:{config_digest}",
                     "size": config_size,
                 },
-                "layers": [],
+                "layers": image_layers,
             }
         )
         attestation_digest, attestation_size = write_blob(
@@ -426,9 +529,7 @@ class MaterialTests(unittest.TestCase):
                         "mediaType": "application/vnd.in-toto+json",
                         "digest": f"sha256:{'2' * 64}",
                         "size": 0,
-                        "annotations": {
-                            "in-toto.io/predicate-type": "https://slsa.dev/provenance/v0.2"
-                        },
+                        "annotations": {"in-toto.io/predicate-type": slsa_predicate},
                     },
                 ],
             }
@@ -478,6 +579,20 @@ class MaterialTests(unittest.TestCase):
             for source in sorted(layout.rglob("*")):
                 output.add(source, arcname=source.relative_to(layout), recursive=False)
         return archive, image_digest
+
+    def _kata_extension_entries(self) -> dict[str, bytes | None]:
+        return {
+            "manifest.yaml": b"version: v1alpha1\n",
+            "rootfs": None,
+            "rootfs/usr/local/bin/containerd-shim-kata-qemu-snp-v2": b"shim",
+            "rootfs/usr/local/bin/containerd-shim-kata-v2": b"shim",
+            "rootfs/usr/local/share/codewire/confidential-storage/materials.spdx.json": b"{}\n",
+            "rootfs/usr/local/share/codewire/confidential-storage/provenance.in-toto.json": b"{}\n",
+            "rootfs/usr/local/share/kata-containers/configuration-qemu-snp.toml": b'shared_fs = "none"\n',
+            "rootfs/usr/local/share/kata-containers/kata-containers-confidential.img": b"image",
+            "rootfs/usr/local/share/kata-containers/kata-containers-initrd-confidential.img": b"initrd",
+            "rootfs/usr/local/share/kata-containers/root_hash_confidential.txt": b"hash\n",
+        }
 
 
 if __name__ == "__main__":

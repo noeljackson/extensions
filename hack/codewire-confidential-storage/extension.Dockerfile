@@ -12,4 +12,4 @@ LABEL org.opencontainers.image.source="https://github.com/noeljackson/extensions
       io.codewire.source.kata-containers="${KATA_CONTAINERS_REVISION}" \
       io.codewire.source-lock.sha256="${SOURCE_LOCK_SHA256}"
 
-COPY --chown=0:0 rootfs/ /
+COPY --chown=0:0 extension/ /
