@@ -330,27 +330,28 @@ case "$command" in
     verify_kata_static "$kata_tarball"
     mkdir -p "$output_dir"
     work_dir="$(new_work_dir)"
-    container_id=""
     cleanup_extension() {
-      if [[ -n "$container_id" ]]; then
-        docker container rm "$container_id" >/dev/null 2>&1 || true
-      fi
       remove_tree "$work_dir"
     }
     trap cleanup_extension EXIT
-    mkdir -p "$work_dir/context/rootfs" "$work_dir/static"
+    mkdir -p "$work_dir/context/extension" "$work_dir/static"
     base_image="$(lock_value '.base_images.kata_talos_extension')"
-    docker pull --platform linux/amd64 "$base_image" >/dev/null
-    container_id="$(docker create --platform linux/amd64 "$base_image" /bin/true)"
-    docker export "$container_id" | tar --extract --directory "$work_dir/context/rootfs" --no-same-owner
-    docker container rm "$container_id" >/dev/null
-    container_id=""
+    docker buildx build \
+      --file "$script_dir/base-rootfs.Dockerfile" \
+      --platform linux/amd64 \
+      --build-arg "BASE_IMAGE=${base_image}" \
+      --output "type=local,dest=$work_dir/context/extension" \
+      "$script_dir"
+    python3 "$materials_tool" --lock "$lock_file" verify-extension-tree \
+      --root "$work_dir/context/extension"
     tar --zstd -xf "$kata_tarball" -C "$work_dir/static"
-    overlay_confidential_payload "$work_dir/static" "$work_dir/context/rootfs"
+    overlay_confidential_payload "$work_dir/static" "$work_dir/context/extension/rootfs"
     python3 "$materials_tool" --lock "$lock_file" emit \
-      --output-dir "$work_dir/context/rootfs/usr/local/share/codewire/confidential-storage"
+      --output-dir "$work_dir/context/extension/rootfs/usr/local/share/codewire/confidential-storage"
+    python3 "$materials_tool" --lock "$lock_file" verify-extension-tree \
+      --root "$work_dir/context/extension"
     epoch="$(lock_value '.source_date_epoch')"
-    find "$work_dir/context/rootfs" -exec touch -h --date="@${epoch}" {} +
+    find "$work_dir/context/extension" -exec touch -h --date="@${epoch}" {} +
     docker buildx build \
       --file "$script_dir/extension.Dockerfile" \
       --platform linux/amd64 \
