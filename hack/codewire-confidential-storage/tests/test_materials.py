@@ -1,0 +1,463 @@
+from __future__ import annotations
+
+import copy
+import hashlib
+import importlib.util
+import json
+import subprocess
+import tarfile
+import tempfile
+import unittest
+from pathlib import Path
+
+SCRIPT_DIR = Path(__file__).resolve().parents[1]
+LOCK_PATH = SCRIPT_DIR / "sources.lock.json"
+SPEC = importlib.util.spec_from_file_location(
+    "codewire_materials", SCRIPT_DIR / "materials.py"
+)
+assert SPEC and SPEC.loader
+materials = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(materials)
+
+
+class MaterialTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.lock = materials.load_lock(LOCK_PATH)
+
+    def test_canonical_lock_binds_accepted_sources(self) -> None:
+        expected = {
+            "guest_components": (
+                "cf3fa4120e60910a1e62dd8a933153ce61034566",
+                "5b2de8568531c50d08904e8ad9b003fca3c77d16",
+            ),
+            "kata_containers": (
+                "46b43e417977d1966902e19cc589f69097d0480a",
+                "6cb19207966d6d5cf2213bdf4237a28a62486746",
+            ),
+            "longhorn_manager": (
+                "03bd58fa2fa9c6f935f75b63fb0fbbf4b097dd8e",
+                "622b12710dbfffc8e6bc2dfd8ee0ced4fbacce31",
+            ),
+            "trustee": (
+                "258ea4acb7b9bd865fce5c63a539f2120dba8298",
+                "1d4368226a1d95ff4f30d6e9c5496595632e29cf",
+            ),
+        }
+        for name, (revision, tree) in expected.items():
+            with self.subTest(name=name):
+                self.assertEqual(self.lock["sources"][name]["revision"], revision)
+                self.assertEqual(self.lock["sources"][name]["tree"], tree)
+        self.assertEqual(self.lock["platforms"], ["linux/amd64"])
+        self.assertEqual(
+            self.lock["talos_extensions"]["installer_profile"],
+            "servernet-confidential-storage-only",
+        )
+
+    def test_branch_archive_and_short_revision_are_rejected(self) -> None:
+        changed = copy.deepcopy(self.lock)
+        source = changed["sources"]["kata_containers"]
+        source["revision"] = "main"
+        source["archive"]["url"] = (
+            "https://codeload.github.com/noeljackson/kata-containers/tar.gz/main"
+        )
+        with self.assertRaisesRegex(materials.MaterialError, "full Git hash"):
+            materials.validate_lock(changed)
+
+    def test_archive_url_must_resolve_exact_revision(self) -> None:
+        changed = copy.deepcopy(self.lock)
+        changed["sources"]["guest_components"]["archive"]["url"] = (
+            "https://codeload.github.com/noeljackson/guest-components/tar.gz/main"
+        )
+        with self.assertRaisesRegex(materials.MaterialError, "bind the exact revision"):
+            materials.validate_lock(changed)
+
+    def test_digest_only_images_and_servernet_profile_are_required(self) -> None:
+        changed = copy.deepcopy(self.lock)
+        changed["trustee_images"]["kbs"] = (
+            "ghcr.io/confidential-containers/staged-images/kbs-grpc-as:latest"
+        )
+        with self.assertRaisesRegex(materials.MaterialError, "digest reference"):
+            materials.validate_lock(changed)
+        changed = copy.deepcopy(self.lock)
+        changed["talos_extensions"]["installer_profile"] = "all-nodes"
+        with self.assertRaisesRegex(materials.MaterialError, "Server.net"):
+            materials.validate_lock(changed)
+        changed = copy.deepcopy(self.lock)
+        changed["base_images"]["longhorn_manager_runtime"] = (
+            "docker.io/longhornio/longhorn-manager:v1.12.0"
+        )
+        with self.assertRaisesRegex(materials.MaterialError, "exact Docker Hub digest"):
+            materials.validate_lock(changed)
+        changed = copy.deepcopy(self.lock)
+        changed["base_images"]["buildkit_sbom_scanner"] = (
+            "docker.io/docker/buildkit-syft-scanner:stable-1"
+        )
+        with self.assertRaisesRegex(materials.MaterialError, "exact Docker Hub digest"):
+            materials.validate_lock(changed)
+
+    def test_secret_named_fields_are_rejected(self) -> None:
+        changed = copy.deepcopy(self.lock)
+        changed["sources"]["trustee"]["admin_token"] = "redacted"
+        with self.assertRaisesRegex(materials.MaterialError, "secret-bearing"):
+            materials.validate_lock(changed)
+
+    def test_archive_verification_fails_closed_on_mutation(self) -> None:
+        changed = copy.deepcopy(self.lock)
+        with tempfile.TemporaryDirectory() as temporary:
+            cache = Path(temporary)
+            for name, source in changed["sources"].items():
+                data = f"archive:{name}".encode()
+                path = cache / f"{name}.tar.gz"
+                path.write_bytes(data)
+                source["archive"]["sha256"] = hashlib.sha256(data).hexdigest()
+                source["archive"]["sha512"] = hashlib.sha512(data).hexdigest()
+            materials.verify_archives(changed, cache)
+            (cache / "kata_containers.tar.gz").write_bytes(b"mutated")
+            with self.assertRaisesRegex(materials.MaterialError, "mismatch"):
+                materials.verify_archives(changed, cache)
+
+    def test_prepare_kata_checks_accepted_anchors_and_adds_tool_closure(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "source"
+            self._init_repo(source)
+            files = {
+                "versions.yaml": (
+                    "  coco-guest-components:\n"
+                    '    description: "test"\n'
+                    '    url: "https://github.com/confidential-containers/guest-components/"\n'
+                    '    version: "da8d93f2797088a5f0636c8c1eeb31da73784fe8"\n'
+                ),
+                "tools/osbuilder/rootfs-builder/ubuntu/config.sh": (
+                    'PACKAGES="base"\nPACKAGES+=" cryptsetup-bin e2fsprogs"\n'
+                ),
+                "tools/packaging/kata-deploy/local-build/Makefile": "all:\n\ttrue\n",
+                "tools/packaging/kata-deploy/local-build/kata-deploy-binaries.sh": "test\n",
+                "tools/packaging/static-build/coco-guest-components/Dockerfile": "FROM scratch\n",
+                "tools/packaging/static-build/coco-guest-components/build-static-coco-guest-components.sh": "test\n",
+                "tools/packaging/static-build/coco-guest-components/build.sh": "test\n",
+            }
+            for relative, content in files.items():
+                path = source / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(content, encoding="utf-8")
+            self._commit_all(source)
+
+            lock = copy.deepcopy(self.lock)
+            self._bind_test_repo(lock, "kata_containers", source)
+            lock["kata_build_contract"]["input_files"] = {
+                relative: hashlib.sha256(content.encode()).hexdigest()
+                for relative, content in files.items()
+            }
+            lock_path = root / "lock.json"
+            self._write_lock(lock_path, lock)
+            output = root / "prepared"
+            materials.prepare_kata(lock_path, lock, source, output)
+            materials.verify_prepared_kata(lock, output)
+            self.assertIn(
+                self.lock["sources"]["guest_components"]["revision"],
+                (output / "versions.yaml").read_text(encoding="utf-8"),
+            )
+            self.assertIn(
+                'PACKAGES+=" cryptsetup-bin dmsetup e2fsprogs"',
+                (output / "tools/osbuilder/rootfs-builder/ubuntu/config.sh").read_text(
+                    encoding="utf-8"
+                ),
+            )
+
+    def test_prepare_kata_refuses_unknown_base_text(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            path = root / "config.sh"
+            path.write_text("PACKAGES=unexpected\n", encoding="utf-8")
+            with self.assertRaisesRegex(materials.MaterialError, "anchor count is 0"):
+                materials.replace_once(
+                    path,
+                    'PACKAGES+=" cryptsetup-bin e2fsprogs"',
+                    'PACKAGES+=" cryptsetup-bin dmsetup e2fsprogs"',
+                    "guest tool closure",
+                )
+
+    def test_prepare_longhorn_keeps_accepted_git_identity(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "source"
+            self._init_repo(source)
+            files = {
+                "scripts/version": (
+                    "#!/bin/bash\n"
+                    'GITCOMMIT="$(git rev-parse HEAD)"\n'
+                    "BUILDDATE=$(date -u --rfc-3339=seconds)\n"
+                ),
+                "package/Dockerfile": (
+                    "FROM scratch AS builder\n"
+                    "ARG LONGHORN_TWO_MINOR_UPGRADE_DISTROS\n"
+                    "ENV LONGHORN_TWO_MINOR_UPGRADE_DISTROS=${LONGHORN_TWO_MINOR_UPGRADE_DISTROS}\n"
+                    "FROM registry.suse.com/bci/bci-base:15.7@sha256:c2b0859ac7ceaf22c2d75a05c931dd7976dc0ac75e1a3a5f3c14380fcc3fb029 AS release\n"
+                    "RUN zypper -n ref && \\\n"
+                    "    zypper update -y\n\n"
+                    "RUN zypper -n install \\\n"
+                    "    iputils \\\n"
+                    "    iproute2 \\\n"
+                    "    nfs-client \\\n"
+                    "    cifs-utils \\\n"
+                    "    bind-utils \\\n"
+                    "    e2fsprogs \\\n"
+                    "    xfsprogs \\\n"
+                    "    zip \\\n"
+                    "    unzip \\\n"
+                    "    kmod \\\n"
+                    "    smartmontools \\\n"
+                    "    && zypper clean --all\n\n"
+                ),
+                "package/nsmounter": "#!/bin/sh\nexit 0\n",
+            }
+            for relative, content in files.items():
+                path = source / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(content, encoding="utf-8")
+            self._commit_all(source)
+
+            lock = copy.deepcopy(self.lock)
+            self._bind_test_repo(lock, "longhorn_manager", source)
+            lock["longhorn_build_contract"]["input_files"] = {
+                relative: hashlib.sha256(content.encode()).hexdigest()
+                for relative, content in files.items()
+            }
+            lock_path = root / "lock.json"
+            self._write_lock(lock_path, lock)
+            output = root / "prepared"
+            materials.prepare_longhorn(lock_path, lock, source, output)
+            materials.verify_prepared_longhorn(lock, output)
+            self.assertIn("SOURCE_DATE_EPOCH", (output / "scripts/version").read_text())
+            prepared_dockerfile = (output / "package/Dockerfile").read_text()
+            self.assertIn(
+                lock["base_images"]["longhorn_manager_runtime"], prepared_dockerfile
+            )
+            self.assertNotIn("zypper", prepared_dockerfile)
+            self.assertEqual(
+                self._git(output, "rev-parse", "HEAD"),
+                lock["sources"]["longhorn_manager"]["revision"],
+            )
+            self.assertEqual(
+                self._git(output, "status", "--porcelain", "--untracked-files=no"), ""
+            )
+
+    def test_material_receipts_are_deterministic_and_non_secret(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            first = root / "first"
+            second = root / "second"
+            artifact = root / "image.oci.tar"
+            artifact.write_bytes(b"deterministic artifact")
+            materials.emit_materials(
+                LOCK_PATH, self.lock, first, [("image.oci.tar", artifact)]
+            )
+            materials.emit_materials(
+                LOCK_PATH, self.lock, second, [("image.oci.tar", artifact)]
+            )
+            for name in ("materials.spdx.json", "provenance.in-toto.json"):
+                self.assertEqual(
+                    (first / name).read_bytes(), (second / name).read_bytes()
+                )
+                text = (first / name).read_text(encoding="utf-8")
+                self.assertNotRegex(text.lower(), r"password|private_key|admin_token")
+                self.assertIn("46b43e417977d1966902e19cc589f69097d0480a", text)
+
+    def test_oci_subject_uses_platform_manifest_and_checks_attestations(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            archive, image_digest = self._write_oci_archive(root / "valid")
+            subject = materials.verify_oci_image(
+                LOCK_PATH, self.lock, "longhorn-manager", archive
+            )
+            self.assertEqual(
+                subject,
+                {
+                    "name": "longhorn-manager@linux-amd64",
+                    "digest": {"sha256": image_digest},
+                },
+            )
+
+            invalid, _ = self._write_oci_archive(
+                root / "invalid", source_lock_label="0" * 64
+            )
+            with self.assertRaisesRegex(materials.MaterialError, "exact source lock"):
+                materials.verify_oci_image(
+                    LOCK_PATH, self.lock, "longhorn-manager", invalid
+                )
+
+    def test_build_recipe_has_no_publication_path(self) -> None:
+        recipe = (SCRIPT_DIR / "build.sh").read_text(encoding="utf-8")
+        self.assertNotIn(" --push", recipe)
+        self.assertNotIn("docker login", recipe)
+        self.assertNotIn("GITHUB_TOKEN", recipe)
+        self.assertNotIn("--sbom=true", recipe)
+        self.assertIn(".base_images.buildkit_sbom_scanner", recipe)
+        self.assertEqual(recipe.count("type=sbom,generator=$(lock_value"), 2)
+        self.assertIn('mode:"no-push"', recipe)
+        self.assertIn(
+            'built_tarball="$local_build/kata-static.tar.zst"',
+            recipe,
+        )
+        self.assertIn("\\( -type f -o -type l \\)", recipe)
+        self.assertIn('"$base_image" /bin/true', recipe)
+        self.assertIn("rootfs-image-confidential-tarball", recipe)
+        self.assertIn("rootfs-initrd-confidential-tarball", recipe)
+        self.assertIn("qemu-snp-experimental-tarball", recipe)
+        self.assertIn("sfdisk --json", recipe)
+        self.assertIn(".bootable == true", recipe)
+        self.assertNotIn("rootfs-image-mariner-tarball", recipe)
+        self.assertNotIn("qemu-tdx-experimental-tarball", recipe)
+
+    def _init_repo(self, path: Path) -> None:
+        path.mkdir()
+        subprocess.run(["git", "init", "--quiet", path], check=True)
+        self._git(path, "config", "user.name", "Codewire Test")
+        self._git(path, "config", "user.email", "test@codewire.invalid")
+
+    def _commit_all(self, path: Path) -> None:
+        self._git(path, "add", ".")
+        self._git(path, "commit", "--quiet", "-m", "test source")
+
+    def _git(self, path: Path, *args: str) -> str:
+        return subprocess.run(
+            ["git", "-C", path, *args],
+            check=True,
+            text=True,
+            stdout=subprocess.PIPE,
+        ).stdout.strip()
+
+    def _bind_test_repo(self, lock: dict, source_name: str, repo: Path) -> None:
+        source = lock["sources"][source_name]
+        source["revision"] = self._git(repo, "rev-parse", "HEAD")
+        source["tree"] = self._git(repo, "rev-parse", "HEAD^{tree}")
+        source["archive"]["url"] = (
+            f"https://codeload.github.com/{source['repository'].removeprefix('https://github.com/')}/"
+            f"tar.gz/{source['revision']}"
+        )
+
+    def _write_lock(self, path: Path, lock: dict) -> None:
+        path.write_text(
+            json.dumps(lock, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
+
+    def _write_oci_archive(
+        self, root: Path, source_lock_label: str | None = None
+    ) -> tuple[Path, str]:
+        layout = root / "layout"
+        blobs = layout / "blobs" / "sha256"
+        blobs.mkdir(parents=True)
+
+        def write_blob(value: dict) -> tuple[str, int]:
+            data = json.dumps(value, sort_keys=True, separators=(",", ":")).encode()
+            digest = hashlib.sha256(data).hexdigest()
+            (blobs / digest).write_bytes(data)
+            return digest, len(data)
+
+        config_digest, config_size = write_blob(
+            {
+                "architecture": "amd64",
+                "os": "linux",
+                "created": materials.iso_time(self.lock["source_date_epoch"]),
+                "config": {
+                    "Labels": {
+                        "io.codewire.source-lock.sha256": source_lock_label
+                        or materials.lock_digest(LOCK_PATH),
+                        "org.opencontainers.image.revision": self.lock["sources"][
+                            "longhorn_manager"
+                        ]["revision"],
+                    }
+                },
+            }
+        )
+        image_digest, image_size = write_blob(
+            {
+                "schemaVersion": 2,
+                "mediaType": "application/vnd.oci.image.manifest.v1+json",
+                "config": {
+                    "mediaType": "application/vnd.oci.image.config.v1+json",
+                    "digest": f"sha256:{config_digest}",
+                    "size": config_size,
+                },
+                "layers": [],
+            }
+        )
+        attestation_digest, attestation_size = write_blob(
+            {
+                "schemaVersion": 2,
+                "mediaType": "application/vnd.oci.image.manifest.v1+json",
+                "config": {
+                    "mediaType": "application/vnd.oci.image.config.v1+json",
+                    "digest": f"sha256:{'0' * 64}",
+                    "size": 0,
+                },
+                "layers": [
+                    {
+                        "mediaType": "application/vnd.in-toto+json",
+                        "digest": f"sha256:{'1' * 64}",
+                        "size": 0,
+                        "annotations": {
+                            "in-toto.io/predicate-type": "https://spdx.dev/Document"
+                        },
+                    },
+                    {
+                        "mediaType": "application/vnd.in-toto+json",
+                        "digest": f"sha256:{'2' * 64}",
+                        "size": 0,
+                        "annotations": {
+                            "in-toto.io/predicate-type": "https://slsa.dev/provenance/v0.2"
+                        },
+                    },
+                ],
+            }
+        )
+        nested_digest, nested_size = write_blob(
+            {
+                "schemaVersion": 2,
+                "mediaType": "application/vnd.oci.image.index.v1+json",
+                "manifests": [
+                    {
+                        "mediaType": "application/vnd.oci.image.manifest.v1+json",
+                        "digest": f"sha256:{image_digest}",
+                        "size": image_size,
+                        "platform": {"architecture": "amd64", "os": "linux"},
+                    },
+                    {
+                        "mediaType": "application/vnd.oci.image.manifest.v1+json",
+                        "digest": f"sha256:{attestation_digest}",
+                        "size": attestation_size,
+                        "platform": {"architecture": "unknown", "os": "unknown"},
+                        "annotations": {
+                            "vnd.docker.reference.digest": f"sha256:{image_digest}",
+                            "vnd.docker.reference.type": "attestation-manifest",
+                        },
+                    },
+                ],
+            }
+        )
+        (layout / "index.json").write_text(
+            json.dumps(
+                {
+                    "schemaVersion": 2,
+                    "manifests": [
+                        {
+                            "mediaType": "application/vnd.oci.image.index.v1+json",
+                            "digest": f"sha256:{nested_digest}",
+                            "size": nested_size,
+                        }
+                    ],
+                },
+                sort_keys=True,
+            ),
+            encoding="utf-8",
+        )
+        archive = root / "image.oci.tar"
+        with tarfile.open(archive, "w") as output:
+            for source in sorted(layout.rglob("*")):
+                output.add(source, arcname=source.relative_to(layout), recursive=False)
+        return archive, image_digest
+
+
+if __name__ == "__main__":
+    unittest.main()
