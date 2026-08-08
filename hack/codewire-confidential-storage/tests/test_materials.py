@@ -5,6 +5,7 @@ import hashlib
 import importlib.util
 import io
 import json
+import struct
 import subprocess
 import tarfile
 import tempfile
@@ -342,6 +343,38 @@ class MaterialTests(unittest.TestCase):
                     LOCK_PATH, self.lock, "kata-extension", invalid
                 )
 
+    def test_kata_extension_rejects_non_talos_shim_abis(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            for name, shim, expected in (
+                (
+                    "interp",
+                    self._elf_with_program_segment(
+                        3, b"/lib64/ld-linux-x86-64.so.2\0"
+                    ),
+                    "PT_INTERP",
+                ),
+                (
+                    "needed",
+                    self._elf_with_program_segment(
+                        2, struct.pack("<QQQQ", 1, 0, 0, 0)
+                    ),
+                    "DT_NEEDED",
+                ),
+            ):
+                with self.subTest(name=name):
+                    entries = self._kata_extension_entries()
+                    entries["rootfs/usr/local/bin/containerd-shim-kata-v2"] = shim
+                    archive, _ = self._write_oci_archive(
+                        root / name,
+                        component="kata-extension",
+                        layer_entries=entries,
+                    )
+                    with self.assertRaisesRegex(materials.MaterialError, expected):
+                        materials.verify_oci_image(
+                            LOCK_PATH, self.lock, "kata-extension", archive
+                        )
+
     def test_talos_extension_tree_has_exact_top_level_contract(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -376,6 +409,10 @@ class MaterialTests(unittest.TestCase):
             'built_tarball="$local_build/kata-static.tar.zst"',
             recipe,
         )
+        self.assertIn("STATIC_RUNTIME=yes USE_CACHE=no", recipe)
+        self.assertIn("readelf -l", recipe)
+        self.assertIn("readelf -d", recipe)
+        self.assertIn('runtime_abi:"static"', recipe)
         self.assertIn("\\( -type f -o -type l \\)", recipe)
         self.assertIn("rootfs-image-confidential-tarball", recipe)
         self.assertIn("rootfs-initrd-confidential-tarball", recipe)
@@ -452,7 +489,12 @@ class MaterialTests(unittest.TestCase):
                         layer.addfile(member)
                     else:
                         member.size = len(data)
-                        member.mode = 0o644
+                        member.mode = (
+                            0o755
+                            if name
+                            == "rootfs/usr/local/bin/containerd-shim-kata-v2"
+                            else 0o644
+                        )
                         layer.addfile(member, io.BytesIO(data))
             layer_digest, layer_size = write_blob_bytes(layer_buffer.getvalue())
             image_layers = [
@@ -585,7 +627,7 @@ class MaterialTests(unittest.TestCase):
             "manifest.yaml": b"version: v1alpha1\n",
             "rootfs": None,
             "rootfs/usr/local/bin/containerd-shim-kata-qemu-snp-v2": b"shim",
-            "rootfs/usr/local/bin/containerd-shim-kata-v2": b"shim",
+            "rootfs/usr/local/bin/containerd-shim-kata-v2": self._static_amd64_elf(),
             "rootfs/usr/local/share/codewire/confidential-storage/materials.spdx.json": b"{}\n",
             "rootfs/usr/local/share/codewire/confidential-storage/provenance.in-toto.json": b"{}\n",
             "rootfs/usr/local/share/kata-containers/configuration-qemu-snp.toml": b'shared_fs = "none"\n',
@@ -593,6 +635,34 @@ class MaterialTests(unittest.TestCase):
             "rootfs/usr/local/share/kata-containers/kata-containers-initrd-confidential.img": b"initrd",
             "rootfs/usr/local/share/kata-containers/root_hash_confidential.txt": b"hash\n",
         }
+
+    def _static_amd64_elf(self) -> bytes:
+        data = bytearray(64)
+        data[:16] = b"\x7fELF\x02\x01\x01" + b"\0" * 9
+        struct.pack_into("<HHI", data, 16, 2, 62, 1)
+        struct.pack_into("<HHH", data, 52, 64, 56, 0)
+        return bytes(data)
+
+    def _elf_with_program_segment(self, program_type: int, payload: bytes) -> bytes:
+        data = bytearray(self._static_amd64_elf())
+        struct.pack_into("<Q", data, 32, 64)
+        struct.pack_into("<H", data, 56, 1)
+        payload_offset = 64 + 56
+        data.extend(
+            struct.pack(
+                "<IIQQQQQQ",
+                program_type,
+                4,
+                payload_offset,
+                0,
+                0,
+                len(payload),
+                len(payload),
+                8,
+            )
+        )
+        data.extend(payload)
+        return bytes(data)
 
 
 if __name__ == "__main__":

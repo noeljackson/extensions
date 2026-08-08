@@ -11,6 +11,7 @@ import io
 import json
 import os
 import re
+import struct
 import subprocess
 import sys
 import tarfile
@@ -762,6 +763,40 @@ def verify_talos_extension_tree(root: Path) -> None:
         raise MaterialError("Talos extension rootfs must be a directory")
 
 
+def verify_talos_runtime_elf(data: bytes) -> None:
+    """Reject host runtime binaries that require a userspace ABI Talos lacks."""
+    if len(data) < 64 or data[:4] != b"\x7fELF":
+        raise MaterialError("Kata runtime shim is not an ELF executable")
+    if data[4] != 2 or data[5] != 1:
+        raise MaterialError("Kata runtime shim is not little-endian ELF64")
+    if struct.unpack_from("<H", data, 18)[0] != 62:
+        raise MaterialError("Kata runtime shim is not amd64 ELF")
+
+    program_offset = struct.unpack_from("<Q", data, 32)[0]
+    program_entry_size = struct.unpack_from("<H", data, 54)[0]
+    program_count = struct.unpack_from("<H", data, 56)[0]
+    if program_count and program_entry_size < 56:
+        raise MaterialError("Kata runtime shim has invalid program headers")
+
+    for index in range(program_count):
+        offset = program_offset + index * program_entry_size
+        if offset + 56 > len(data):
+            raise MaterialError("Kata runtime shim has truncated program headers")
+        program_type, _, file_offset, _, _, file_size, _, _ = struct.unpack_from(
+            "<IIQQQQQQ", data, offset
+        )
+        if program_type == 3:  # PT_INTERP
+            raise MaterialError("Kata runtime shim contains PT_INTERP")
+        if program_type != 2:  # PT_DYNAMIC
+            continue
+        if file_offset + file_size > len(data) or file_size % 16:
+            raise MaterialError("Kata runtime shim has an invalid dynamic section")
+        for dynamic_offset in range(file_offset, file_offset + file_size, 16):
+            dynamic_tag, _ = struct.unpack_from("<QQ", data, dynamic_offset)
+            if dynamic_tag == 1:  # DT_NEEDED
+                raise MaterialError("Kata runtime shim contains DT_NEEDED")
+
+
 def verify_kata_extension_layer(data: bytes) -> None:
     try:
         with tarfile.open(fileobj=io.BytesIO(data), mode="r:*") as layer:
@@ -818,6 +853,17 @@ def verify_kata_extension_layer(data: bytes) -> None:
         raise MaterialError(
             f"Kata extension layer lacks required payload {missing_payload}"
         )
+    shim = by_name["rootfs/usr/local/bin/containerd-shim-kata-v2"]
+    if not shim.isfile() or not shim.mode & 0o111:
+        raise MaterialError("Kata runtime shim is not an executable regular file")
+    try:
+        with tarfile.open(fileobj=io.BytesIO(data), mode="r:*") as layer:
+            stream = layer.extractfile(shim)
+            if stream is None:
+                raise MaterialError("Kata runtime shim data is unavailable")
+            verify_talos_runtime_elf(stream.read())
+    except (OSError, tarfile.TarError) as error:
+        raise MaterialError(f"Kata runtime shim is unreadable: {error}") from error
 
 
 def verify_oci_image(
