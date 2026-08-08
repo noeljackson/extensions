@@ -154,15 +154,27 @@ verify_kata_static() (
   require_command debugfs
   require_command dd
   require_command jq
+  require_command readelf
   require_command sfdisk
 
   local audit_dir image rootfs shim cdh_output partition_json sector_size partition_start partition_size
+  local program_headers dynamic_tags
   audit_dir="$(new_work_dir)"
   trap 'remove_tree "${audit_dir:-}"' EXIT
   tar --zstd -xf "$tarball" -C "$audit_dir"
   image="$(unique_file "$audit_dir" '*/opt/kata/share/kata-containers/kata-containers-confidential.img')"
   shim="$(unique_file "$audit_dir" '*/opt/kata/bin/containerd-shim-kata-v2')"
   [[ -x "$shim" ]] || die "exact Kata runtime shim is not executable"
+  program_headers="$(LC_ALL=C readelf -l "$shim")" \
+    || die "exact Kata runtime shim has unreadable program headers"
+  if grep -Eq 'INTERP|Requesting program interpreter' <<<"$program_headers"; then
+    die "exact Kata runtime shim requires an ELF interpreter"
+  fi
+  dynamic_tags="$(LC_ALL=C readelf -d "$shim")" \
+    || die "exact Kata runtime shim has an unreadable dynamic section"
+  if grep -q '(NEEDED)' <<<"$dynamic_tags"; then
+    die "exact Kata runtime shim has dynamic library dependencies"
+  fi
 
   partition_json="$(sfdisk --json "$image")"
   sector_size="$(jq -er '.partitiontable.sectorsize | select(type == "number" and . > 0)' <<<"$partition_json")"
@@ -264,7 +276,7 @@ case "$command" in
       --arg longhorn "$(lock_value '.sources.longhorn_manager.revision')" \
       --arg trustee "$(lock_value '.sources.trustee.revision')" \
       --arg source_lock "$(lock_sha256)" \
-      '{schema:"codewire.confidential-storage.build-plan/v1", mode:"no-push", platform:$platform, source_lock_sha256:$source_lock, sources:{guest_components:$guest,kata_containers:$kata,longhorn_manager:$longhorn,trustee:$trustee}, outputs:["kata-static.tar.zst","kata-extension.oci.tar","longhorn-manager.oci.tar","materials.spdx.json","provenance.in-toto.json"]}'
+      '{schema:"codewire.confidential-storage.build-plan/v1", mode:"no-push", platform:$platform, runtime_abi:"static", source_lock_sha256:$source_lock, sources:{guest_components:$guest,kata_containers:$kata,longhorn_manager:$longhorn,trustee:$trustee}, outputs:["kata-static.tar.zst","kata-extension.oci.tar","longhorn-manager.oci.tar","materials.spdx.json","provenance.in-toto.json"]}'
     ;;
 
   prepare-kata)
@@ -294,7 +306,7 @@ case "$command" in
     parallel_targets="${kata_parallel_targets[*]}"
     serial_targets="${kata_serial_targets[*]}"
     final_inputs="${kata_final_inputs[*]}"
-    USE_CACHE=no PUSH_TO_REGISTRY=no RELEASE=yes \
+    STATIC_RUNTIME=yes USE_CACHE=no PUSH_TO_REGISTRY=no RELEASE=yes \
       make -C "$local_build" -f "$local_build/Makefile" all \
       -j "$(nproc)" --output-sync=target V= \
       BASE_TARBALLS="$parallel_targets" \

@@ -34,6 +34,9 @@ does not consult mutable operating-system repositories.
 - build only the Dev SNP artifact closure (agent, CDH, kernel, SEV firmware,
   SNP QEMU, Go shim, and confidential image/initrd), excluding unrelated
   hypervisors and distro images from both failure scope and the final tarball;
+- build the host Kata shim with the static runtime profile and reject any
+  static tarball or final extension layer whose shim contains `PT_INTERP` or
+  `DT_NEEDED`, preserving the Talos host ABI;
 - build the exact Longhorn manager OCI image with a deterministic embedded
   build date, inheriting its runtime packages from the immutable official
   v1.12.0 image instead of consulting mutable OS repositories; and
