@@ -418,6 +418,52 @@ def replace_once(path: Path, old: str, new: str, description: str) -> dict[str, 
     }
 
 
+def bind_yaml_asset_source(
+    path: Path,
+    asset: str,
+    repository: str,
+    revision: str,
+    description: str,
+) -> dict[str, str]:
+    text = path.read_text(encoding="utf-8")
+    block_pattern = re.compile(
+        rf"(?ms)^  {re.escape(asset)}:\n.*?(?=^  [A-Za-z0-9][A-Za-z0-9_.-]*:\n|\Z)"
+    )
+    blocks = list(block_pattern.finditer(text))
+    if len(blocks) != 1:
+        raise MaterialError(
+            f"{description} component block count is {len(blocks)}, expected 1"
+        )
+
+    block = blocks[0].group(0)
+    url_pattern = re.compile(r'^    url: "[^"\n]+"$', re.MULTILINE)
+    version_pattern = re.compile(r'^    version: "[0-9a-f]{40}"$', re.MULTILINE)
+    url_count = len(url_pattern.findall(block))
+    version_count = len(version_pattern.findall(block))
+    if url_count != 1 or version_count != 1:
+        raise MaterialError(
+            f"{description} requires one url and version field; "
+            f"found url={url_count}, version={version_count}"
+        )
+
+    updated_block = url_pattern.sub(
+        f'    url: "{repository.rstrip("/")}/"', block, count=1
+    )
+    updated_block = version_pattern.sub(
+        f'    version: "{revision}"', updated_block, count=1
+    )
+    updated = text[: blocks[0].start()] + updated_block + text[blocks[0].end() :]
+    before = hashlib.sha256(text.encode()).hexdigest()
+    path.write_text(updated, encoding="utf-8")
+
+    return {
+        "path": os.fspath(path),
+        "description": description,
+        "before_sha256": before,
+        "after_sha256": hashlib.sha256(updated.encode()).hexdigest(),
+    }
+
+
 def prepared_receipt(
     lock_path: Path,
     lock: dict[str, Any],
@@ -446,18 +492,12 @@ def prepare_kata(
     contract = lock["kata_build_contract"]
     verify_file_contract(output, contract["input_files"], "Kata build contract")
     guest = lock["sources"]["guest_components"]
-    old_guest = (
-        '    url: "https://github.com/confidential-containers/guest-components/"\n'
-        '    version: "da8d93f2797088a5f0636c8c1eeb31da73784fe8"\n'
-    )
-    new_guest = (
-        f'    url: "{guest["repository"]}/"\n    version: "{guest["revision"]}"\n'
-    )
     patches = [
-        replace_once(
+        bind_yaml_asset_source(
             output / "versions.yaml",
-            old_guest,
-            new_guest,
+            "coco-guest-components",
+            guest["repository"],
+            guest["revision"],
             "bind the accepted guest-components source",
         ),
         replace_once(

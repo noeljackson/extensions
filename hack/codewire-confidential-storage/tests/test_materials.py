@@ -117,7 +117,7 @@ class MaterialTests(unittest.TestCase):
             with self.assertRaisesRegex(materials.MaterialError, "mismatch"):
                 materials.verify_archives(changed, cache)
 
-    def test_prepare_kata_checks_accepted_anchors_and_adds_tool_closure(self) -> None:
+    def test_prepare_kata_binds_structural_source_and_adds_tool_closure(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             source = root / "source"
@@ -127,7 +127,7 @@ class MaterialTests(unittest.TestCase):
                     "  coco-guest-components:\n"
                     '    description: "test"\n'
                     '    url: "https://github.com/confidential-containers/guest-components/"\n'
-                    '    version: "da8d93f2797088a5f0636c8c1eeb31da73784fe8"\n'
+                    '    version: "d4dce5ce62294cfa741225f7e5b4527ea276f326"\n'
                 ),
                 "tools/osbuilder/rootfs-builder/ubuntu/config.sh": (
                     'PACKAGES="base"\nPACKAGES+=" cryptsetup-bin e2fsprogs"\n'
@@ -160,6 +160,10 @@ class MaterialTests(unittest.TestCase):
                 (output / "versions.yaml").read_text(encoding="utf-8"),
             )
             self.assertIn(
+                f'url: "{self.lock["sources"]["guest_components"]["repository"]}/"',
+                (output / "versions.yaml").read_text(encoding="utf-8"),
+            )
+            self.assertIn(
                 'PACKAGES+=" cryptsetup-bin dmsetup e2fsprogs"',
                 (output / "tools/osbuilder/rootfs-builder/ubuntu/config.sh").read_text(
                     encoding="utf-8"
@@ -177,6 +181,27 @@ class MaterialTests(unittest.TestCase):
                     'PACKAGES+=" cryptsetup-bin e2fsprogs"',
                     'PACKAGES+=" cryptsetup-bin dmsetup e2fsprogs"',
                     "guest tool closure",
+                )
+
+    def test_yaml_asset_binding_rejects_ambiguous_contract(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "versions.yaml"
+            path.write_text(
+                "  coco-guest-components:\n"
+                '    url: "https://example.invalid/one"\n'
+                '    version: "0000000000000000000000000000000000000000"\n'
+                '    version: "1111111111111111111111111111111111111111"\n',
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(
+                materials.MaterialError, "found url=1, version=2"
+            ):
+                materials.bind_yaml_asset_source(
+                    path,
+                    "coco-guest-components",
+                    "https://github.com/example/guest-components",
+                    "2" * 40,
+                    "test binding",
                 )
 
     def test_prepare_longhorn_keeps_accepted_git_identity(self) -> None:
