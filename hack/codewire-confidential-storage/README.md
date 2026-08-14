@@ -34,6 +34,9 @@ does not consult mutable operating-system repositories.
 - export the accepted Kata Talos extension base through BuildKit without
   container-runtime pseudo-files, require exactly `manifest.yaml` plus
   `rootfs/`, and overlay the exact confidential payload inside that `rootfs/`;
+- install the commodity Cloud Hypervisor config and shim from the same pinned
+  runtime-rs archive, then parse the final OCI config and reject legacy
+  Go-runtime fields before publication;
 - build only the Dev SNP artifact closure (agent, CDH, kernel, SEV firmware,
   SNP QEMU, runtime-rs shim, `kata-ctl`, and confidential image/initrd), excluding
   unrelated hypervisors and distro images from both failure scope and the final
@@ -77,7 +80,9 @@ The expensive amd64 recipe is deliberately separate from publication:
 Set `CODEWIRE_CONFIDENTIAL_STORAGE_SCRATCH_ROOT` to an absolute, dedicated
 directory when `/tmp` is too small for the Kata source and build outputs. The
 recipe only removes its own `codewire-confidential-storage.*` children directly
-beneath that root.
+beneath that root. The scratch filesystem must also permit execution because
+the archive verifier checks and runs exact build artifacts; use an executable
+workspace when `/tmp` is mounted `noexec`.
 
 The outputs are local OCI archives plus non-secret material receipts. Publishing
 them is OP-1 and requires its separate action-scoped authority. Never replace a

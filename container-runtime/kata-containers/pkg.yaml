@@ -32,31 +32,12 @@ steps:
         sha256: {{ .CLOUD_HYPERVISOR_STATIC_AMD64_SHA256 }}
         sha512: {{ .CLOUD_HYPERVISOR_STATIC_AMD64_SHA512 }}
     # {{ end }} This in fact is YAML comment, but Go templating instruction is evaluated by bldr
-      - url: https://github.com/noeljackson/kata-containers/archive/{{ .KATA_CONTAINERS_SOURCE_REV }}.tar.gz
-        destination: kata-containers.tar.gz
-        sha256: {{ .KATA_CONTAINERS_SOURCE_SHA256 }}
-        sha512: {{ .KATA_CONTAINERS_SOURCE_SHA512 }}
-    env:
-      GOPATH: /tmp/go
-    cachePaths:
-      - /.cache/go-build
-      - /tmp/go/pkg
   - network: default
     prepare:
       - |
         mkdir -p kata-static
         tar xf kata-static.tar.zst -C kata-static
-      - |
-        mkdir -p ${GOPATH}/src/github.com/kata-containers
-        tar -xzf kata-containers.tar.gz --strip-components=1 -C ${GOPATH}/src/github.com/kata-containers
-      - |
-        cd ${GOPATH}/src/github.com/kata-containers/src/runtime
-        go mod download
   - network: none
-    build:
-      - |
-        cd ${GOPATH}/src/github.com/kata-containers
-        PREFIX=/usr/local make -C src/runtime SKIP_GO_VERSION_CHECK=y containerd-shim-v2
     install:
       - |
         cd kata-static
@@ -64,10 +45,14 @@ steps:
         mkdir -p /rootfs/usr/local/{bin,libexec,share/kata-containers}
 
         install -m 0755 ../cloud-hypervisor-static /rootfs/usr/local/bin/cloud-hypervisor
+        install -m 0755 ./opt/kata/runtime-rs/bin/containerd-shim-kata-v2 /rootfs/usr/local/bin/containerd-shim-kata-v2
+        ln -s containerd-shim-kata-v2 /rootfs/usr/local/bin/containerd-shim-kata-qemu-snp-v2
         cp ./opt/kata/libexec/virtiofsd /rootfs/usr/local/libexec/
 
         cp ./opt/kata/share/kata-containers/kata-containers.img /rootfs/usr/local/share/kata-containers/kata-containers.img
         cp ./opt/kata/share/kata-containers/vmlinux.container /rootfs/usr/local/share/kata-containers/vmlinux.container
+        cp ./opt/kata/share/defaults/kata-containers/runtime-rs/configuration-clh-runtime-rs.toml \
+          /rootfs/usr/local/share/kata-containers/configuration.toml
 
         # Codewire confidential proof parity: install the QEMU-SNP payload
         # and nydus-for-Kata-TEE snapshotter under the Talos extension
@@ -92,7 +77,8 @@ steps:
         chmod 0755 /rootfs/usr/local/lib/containers/nydus-for-kata-tee/containerd-nydus-grpc
         chmod 0755 /rootfs/usr/local/lib/containers/nydus-for-kata-tee/nydus-overlayfs
         chmod 0755 /rootfs/usr/local/bin/nydus-overlayfs
-        cp ./opt/kata/share/defaults/kata-containers/configuration-qemu-snp.toml /rootfs/usr/local/share/kata-containers/
+        cp ./opt/kata/share/defaults/kata-containers/runtime-rs/configuration-qemu-snp-runtime-rs.toml \
+          /rootfs/usr/local/share/kata-containers/configuration-qemu-snp.toml
         cp ./opt/kata/share/ovmf/AMDSEV.fd /rootfs/usr/local/share/ovmf/
         cp ./opt/kata/share/kata-containers/kata-containers-confidential.img /rootfs/usr/local/share/kata-containers/
         cp ./opt/kata/share/kata-containers/kata-containers-initrd-confidential.img /rootfs/usr/local/share/kata-containers/
@@ -111,15 +97,21 @@ steps:
 
         sed -i \
           -e 's#/opt/kata#/usr/local#g' \
+          /rootfs/usr/local/share/kata-containers/configuration.toml
+        grep -Eq '^enable_annotations = .*"cc_init_data"' /rootfs/usr/local/share/kata-containers/configuration.toml \
+          || sed -i '/^enable_annotations = / s/]$/, "cc_init_data"]/' \
+            /rootfs/usr/local/share/kata-containers/configuration.toml
+
+        sed -i \
+          -e 's#/opt/kata#/usr/local#g' \
           -e 's#path = "/usr/local/bin/qemu-system-x86_64"#path = "/usr/local/bin/qemu-system-x86_64-snp-experimental"#' \
           -e 's#valid_hypervisor_paths = \["/usr/local/bin/qemu-system-x86_64"\]#valid_hypervisor_paths = ["/usr/local/bin/qemu-system-x86_64-snp-experimental"]#' \
           -e 's#shared_fs = "virtio-fs"#shared_fs = "none"#' \
-          -e 's#create_container_timeout = 60#create_container_timeout = 180#' \
+          -e 's#create_container_timeout = [0-9][0-9]*#create_container_timeout = 180#' \
           /rootfs/usr/local/share/kata-containers/configuration-qemu-snp.toml
-      - |
-        cd ${GOPATH}/src/github.com/kata-containers/src/runtime
-        cp containerd-shim-kata-v2 /rootfs/usr/local/bin/containerd-shim-kata-v2
-        ln -s containerd-shim-kata-v2 /rootfs/usr/local/bin/containerd-shim-kata-qemu-snp-v2
+        grep -Eq '^enable_annotations = .*"cc_init_data"' /rootfs/usr/local/share/kata-containers/configuration-qemu-snp.toml \
+          || sed -i '/^enable_annotations = / s/]$/, "cc_init_data"]/' \
+            /rootfs/usr/local/share/kata-containers/configuration-qemu-snp.toml
       - |
         mkdir -p /rootfs/etc/cri/conf.d
         cp /pkg/10-kata-containers.part /rootfs/etc/cri/conf.d/10-kata-containers.part
@@ -127,8 +119,6 @@ steps:
         mkdir -p /rootfs/usr/local/etc/containers
         cp /pkg/nydus-for-kata-tee.yaml /rootfs/usr/local/etc/containers/nydus-for-kata-tee.yaml
 
-        mkdir -p /rootfs/usr/local/share/kata-containers
-        cp /pkg/configuration.toml /rootfs/usr/local/share/kata-containers/
     test:
       - |
         # Codewire renders these two hypervisor annotations for both runtime
@@ -143,6 +133,9 @@ steps:
           printf '%s\n' "$annotations" | grep -Fq '"kernel_params"'
           ! printf '%s\n' "$annotations" | grep -Eq '"(\.\*|\*)"'
         done
+        grep -Fqx '[hypervisor.clh]' /rootfs/usr/local/share/kata-containers/configuration.toml
+        grep -Eq '^dial_timeout_ms = [1-9][0-9]*$' /rootfs/usr/local/share/kata-containers/configuration.toml
+        ! grep -Eq '^dial_timeout[[:space:]]*=' /rootfs/usr/local/share/kata-containers/configuration.toml
         mkdir -p /extensions-validator-rootfs
         cp -r /rootfs/ /extensions-validator-rootfs/rootfs
         cp /pkg/manifest.yaml /extensions-validator-rootfs/manifest.yaml
