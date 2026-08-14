@@ -3,7 +3,7 @@
   "platforms": [
     "linux/amd64"
   ],
-  "source_date_epoch": 1786015396,
+  "source_date_epoch": 1786729821,
   "sources": {
     "extensions": {
       "repository": "https://github.com/noeljackson/extensions",
@@ -18,35 +18,35 @@
     },
     "guest_components": {
       "repository": "https://github.com/noeljackson/guest-components",
-      "revision": "cf3fa4120e60910a1e62dd8a933153ce61034566",
-      "tree": "5b2de8568531c50d08904e8ad9b003fca3c77d16",
-      "source_date_epoch": 1786008597,
+      "revision": "4f851920f568067ba6ad7542f986f69775f28ea3",
+      "tree": "8468a2595cf7522e769ed33f62fb27e266137108",
+      "source_date_epoch": 1786717619,
       "archive": {
-        "url": "https://codeload.github.com/noeljackson/guest-components/tar.gz/cf3fa4120e60910a1e62dd8a933153ce61034566",
-        "sha256": "fd1d13bcc8633c3529b3cba5589abbc55e089bb36758668da1a75ee5e0d4bb0f",
-        "sha512": "ba70c74705fb6d7a7f46549e0eefb0db53431a1ea67aa5765ededbb330ddb10579427f5ce5da5aa8ad779a83b6e6cf55d1fc559d36ab97ecb10b780c6014b3e8"
+        "url": "https://codeload.github.com/noeljackson/guest-components/tar.gz/4f851920f568067ba6ad7542f986f69775f28ea3",
+        "sha256": "5d2d4c76834a79f299dbdfb0c39ee4fbd8da7ba15d5249ef71c2d4f3ab93d9a1",
+        "sha512": "ffb2c162cf494c0b4c7e6daff1f482725065915171b20402f5e89ff7ab27b22d5e0a8efb0cfda3f93c347a47fd20c9057eb59bd79b84d7b1fe6e15fc24cffdb3"
       }
     },
     "kata_containers": {
       "repository": "https://github.com/noeljackson/kata-containers",
-      "revision": "46b43e417977d1966902e19cc589f69097d0480a",
-      "tree": "6cb19207966d6d5cf2213bdf4237a28a62486746",
-      "source_date_epoch": 1786011725,
+      "revision": "387f4ebbfb787b8324fca1a00a2ff197fd2ff0a7",
+      "tree": "fdb02e8f060bc7d75d57234069d6313dd01b48f1",
+      "source_date_epoch": 1786729821,
       "archive": {
-        "url": "https://codeload.github.com/noeljackson/kata-containers/tar.gz/46b43e417977d1966902e19cc589f69097d0480a",
-        "sha256": "25f99845f3a484dcd0894f49471e7636075f95f151a0a95ee24f7f2016078720",
-        "sha512": "0cb00a6ae617ad9652ae78a619c7dad9f793dcfbc54e8875f487d60e5d055234e3af8663360a4c60a40b57535ad33925cfef1320d9b28561037fb97a62443b97"
+        "url": "https://codeload.github.com/noeljackson/kata-containers/tar.gz/387f4ebbfb787b8324fca1a00a2ff197fd2ff0a7",
+        "sha256": "c08e2ac309183dc7d7e145ec622641e9000718346a353f3e1d634b3c75b7bb78",
+        "sha512": "d741edb0edb4a21d568d1158f3db1f892cc4dd84bc58621aaa078bd14d79d2b80739ec0b0ff5abdb018d4ab6eedfc3b6c2684c5d2e461429c370911988fa9379"
       }
     },
     "longhorn_manager": {
       "repository": "https://github.com/noeljackson/longhorn-manager",
-      "revision": "03bd58fa2fa9c6f935f75b63fb0fbbf4b097dd8e",
-      "tree": "622b12710dbfffc8e6bc2dfd8ee0ced4fbacce31",
-      "source_date_epoch": 1786015396,
+      "revision": "1cfcebd4ac6f7fc8c9b29158e126c36872eb4950",
+      "tree": "bb48a40cc04bdffee4f68927ad2134ca71e36b4d",
+      "source_date_epoch": 1786729805,
       "archive": {
-        "url": "https://codeload.github.com/noeljackson/longhorn-manager/tar.gz/03bd58fa2fa9c6f935f75b63fb0fbbf4b097dd8e",
-        "sha256": "c19ea5ed6ccbfe01f2e20b32575c8ddde1318a94d0a7f4a274ba45cffcc97020",
-        "sha512": "cc4f52a4ca0f0fb4786815222a739de5e25859ddd6222c9756dee8dfeb524cc9a03d4ffcb225b67d9aa416b03b21b15f0b16405a81493ac9e998020cb05c85e3"
+        "url": "https://codeload.github.com/noeljackson/longhorn-manager/tar.gz/1cfcebd4ac6f7fc8c9b29158e126c36872eb4950",
+        "sha256": "f70d5b4a0c8cb28b566caae4fba26d67ebcc0c8f5aaced3de5b5d60a0aa4758b",
+        "sha512": "ffacf733e13731c0e1603d3d053de4eb7d6c7757e23ad699a1d5afb1e19f2031ad29633c94def73a10966310174ecceada166769b5f0189fc455c006682a2808"
       }
     },
     "trustee": {
@@ -95,12 +95,12 @@
   "kata_build_contract": {
     "input_files": {
       "tools/osbuilder/rootfs-builder/ubuntu/config.sh": "0f40cd9ee3b6bcf4b456c2bd252df54891e96cee81b9b2066948f2fddfd783ea",
-      "tools/packaging/kata-deploy/local-build/Makefile": "2a862e9060636b501a307741f6978eef84273fbe1a857ece5430c3d5e4a51a6f",
-      "tools/packaging/kata-deploy/local-build/kata-deploy-binaries.sh": "e70094cf9d1207f52e35e740b2df1801101437e053350d5570bf6e491537a716",
+      "tools/packaging/kata-deploy/local-build/Makefile": "076ac56cbbf96b21b2bb1bf9ac7ebd37b14ed42e1fd9a82784687ca10b7cc39c",
+      "tools/packaging/kata-deploy/local-build/kata-deploy-binaries.sh": "debde23eb2370f17977e408a010c04e52cf966e14f452bbcef0fda4c39bd4d1a",
       "tools/packaging/static-build/coco-guest-components/Dockerfile": "f042732a43ad870a5bf2c68717d1c632f67fd35e12113594015eedd9510f85f9",
       "tools/packaging/static-build/coco-guest-components/build-static-coco-guest-components.sh": "b3c64211d3115c94ed317a3cb8b219e5bb7cd7de03fe73699dabcec1ad2468e8",
       "tools/packaging/static-build/coco-guest-components/build.sh": "598b32f3891be7c20c12bccdadbf634aca1c26b50ec72b724ee304c4420dff75",
-      "versions.yaml": "50d9f82ba3866df8b9e2ffe04cebbd8c3e36edd60b495af6fc3cfb0a31e4a01f"
+      "versions.yaml": "ba009c562eb5ff33c905108c6e87f420e841de75335f55ec23fa290e45648627"
     },
     "required_packages": [
       "cryptsetup-bin",
@@ -129,7 +129,7 @@
   "longhorn_build_contract": {
     "input_files": {
       "package/Dockerfile": "8b2cfe1bdcbbaf4743a0e15614671f572e16a53ca524fdbd07d3f73b3fd1429b",
-      "package/nsmounter": "ea33f4d5c09eca9c07d269fd1a0e390018768590935f124eca5f33e260d3fa4f",
+      "package/nsmounter": "8b9446f3315781d795e4675c3ffde7b8f9284c42a19ad4a35001e36609c8c76e",
       "scripts/version": "e9f307b541af1aa572d070f3f4b2115bbcaa8ff9a871ebef002533d68686216f"
     }
   }

@@ -32,7 +32,7 @@ does not consult mutable operating-system repositories.
   container-runtime pseudo-files, require exactly `manifest.yaml` plus
   `rootfs/`, and overlay the exact confidential payload inside that `rootfs/`;
 - build only the Dev SNP artifact closure (agent, CDH, kernel, SEV firmware,
-  SNP QEMU, Go shim, and confidential image/initrd), excluding unrelated
+  SNP QEMU, runtime-rs shim, `kata-ctl`, and confidential image/initrd), excluding unrelated
   hypervisors and distro images from both failure scope and the final tarball;
 - build the exact Longhorn manager OCI image with a deterministic embedded
   build date, inheriting its runtime packages from the immutable official
