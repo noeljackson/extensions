@@ -93,6 +93,7 @@
     ]
   },
   "kata_build_contract": {
+    "guest_artifact_variant": "ubuntu24.04",
     "input_files": {
       "tools/osbuilder/rootfs-builder/ubuntu/config.sh": "0f40cd9ee3b6bcf4b456c2bd252df54891e96cee81b9b2066948f2fddfd783ea",
       "tools/packaging/kata-deploy/local-build/Makefile": "076ac56cbbf96b21b2bb1bf9ac7ebd37b14ed42e1fd9a82784687ca10b7cc39c",

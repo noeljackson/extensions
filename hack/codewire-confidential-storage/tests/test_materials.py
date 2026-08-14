@@ -51,6 +51,10 @@ class MaterialTests(unittest.TestCase):
                 self.assertEqual(self.lock["sources"][name]["tree"], tree)
         self.assertEqual(self.lock["platforms"], ["linux/amd64"])
         self.assertEqual(
+            self.lock["kata_build_contract"]["guest_artifact_variant"],
+            "ubuntu24.04",
+        )
+        self.assertEqual(
             self.lock["talos_extensions"]["installer_profile"],
             "servernet-confidential-storage-only",
         )
@@ -71,6 +75,12 @@ class MaterialTests(unittest.TestCase):
             "https://codeload.github.com/noeljackson/guest-components/tar.gz/main"
         )
         with self.assertRaisesRegex(materials.MaterialError, "bind the exact revision"):
+            materials.validate_lock(changed)
+
+    def test_guest_artifact_variant_is_fixed(self) -> None:
+        changed = copy.deepcopy(self.lock)
+        changed["kata_build_contract"]["guest_artifact_variant"] = "latest"
+        with self.assertRaisesRegex(materials.MaterialError, "Ubuntu 24.04"):
             materials.validate_lock(changed)
 
     def test_digest_only_images_and_servernet_profile_are_required(self) -> None:
@@ -159,7 +169,12 @@ class MaterialTests(unittest.TestCase):
             materials.prepare_kata(lock_path, lock, source, output)
             materials.verify_prepared_kata(lock, output)
             self.assertIn(
-                self.lock["sources"]["guest_components"]["revision"],
+                (
+                    self.lock["sources"]["guest_components"]["revision"]
+                    + "-"
+                    + self.lock["kata_build_contract"]["guest_artifact_variant"]
+                    + "-amd64"
+                ),
                 (output / "versions.yaml").read_text(encoding="utf-8"),
             )
             self.assertIn(
