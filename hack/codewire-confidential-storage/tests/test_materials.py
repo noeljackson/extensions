@@ -29,16 +29,16 @@ class MaterialTests(unittest.TestCase):
     def test_canonical_lock_binds_accepted_sources(self) -> None:
         expected = {
             "guest_components": (
-                "cf3fa4120e60910a1e62dd8a933153ce61034566",
-                "5b2de8568531c50d08904e8ad9b003fca3c77d16",
+                "4f851920f568067ba6ad7542f986f69775f28ea3",
+                "8468a2595cf7522e769ed33f62fb27e266137108",
             ),
             "kata_containers": (
-                "22693fadaf1b6bff6728163336680b4b3e6ce94e",
-                "64ba58a2b48142ada17d8e3c31bd67772aca9f20",
+                "387f4ebbfb787b8324fca1a00a2ff197fd2ff0a7",
+                "fdb02e8f060bc7d75d57234069d6313dd01b48f1",
             ),
             "longhorn_manager": (
-                "03bd58fa2fa9c6f935f75b63fb0fbbf4b097dd8e",
-                "622b12710dbfffc8e6bc2dfd8ee0ced4fbacce31",
+                "1cfcebd4ac6f7fc8c9b29158e126c36872eb4950",
+                "bb48a40cc04bdffee4f68927ad2134ca71e36b4d",
             ),
             "trustee": (
                 "258ea4acb7b9bd865fce5c63a539f2120dba8298",
@@ -264,7 +264,7 @@ class MaterialTests(unittest.TestCase):
                 )
                 text = (first / name).read_text(encoding="utf-8")
                 self.assertNotRegex(text.lower(), r"password|private_key|admin_token")
-                self.assertIn("22693fadaf1b6bff6728163336680b4b3e6ce94e", text)
+                self.assertIn("387f4ebbfb787b8324fca1a00a2ff197fd2ff0a7", text)
 
     def test_oci_subject_uses_platform_manifest_and_checks_attestations(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -374,6 +374,23 @@ class MaterialTests(unittest.TestCase):
                         materials.verify_oci_image(
                             LOCK_PATH, self.lock, "kata-extension", archive
                         )
+
+    def test_kata_extension_requires_runtime_rs_helper(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            missing_helper_entries = self._kata_extension_entries()
+            del missing_helper_entries["rootfs/usr/local/bin/kata-ctl"]
+            missing_helper, _ = self._write_oci_archive(
+                root / "missing-helper",
+                component="kata-extension",
+                layer_entries=missing_helper_entries,
+            )
+            with self.assertRaisesRegex(
+                materials.MaterialError, "lacks required payload.*kata-ctl"
+            ):
+                materials.verify_oci_image(
+                    LOCK_PATH, self.lock, "kata-extension", missing_helper
+                )
 
     def test_talos_extension_tree_has_exact_top_level_contract(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -628,6 +645,7 @@ class MaterialTests(unittest.TestCase):
             "rootfs": None,
             "rootfs/usr/local/bin/containerd-shim-kata-qemu-snp-v2": b"shim",
             "rootfs/usr/local/bin/containerd-shim-kata-v2": self._static_amd64_elf(),
+            "rootfs/usr/local/bin/kata-ctl": b"kata-ctl",
             "rootfs/usr/local/share/codewire/confidential-storage/materials.spdx.json": b"{}\n",
             "rootfs/usr/local/share/codewire/confidential-storage/provenance.in-toto.json": b"{}\n",
             "rootfs/usr/local/share/kata-containers/configuration-qemu-snp.toml": b'shared_fs = "none"\n',
