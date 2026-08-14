@@ -25,6 +25,9 @@ does not consult mutable operating-system repositories.
 
 - validate and download-check every source lock;
 - prepare exact Kata source with the accepted guest-components revision;
+- derive the immutable guest-components child tag from that revision, the
+  locked Ubuntu variant, and the lock's single `linux/amd64` platform, avoiding
+  a dependency on unrelated multi-architecture manifest assembly;
 - add `dmsetup` beside the already required `cryptsetup-bin` and `e2fsprogs` in
   the measured guest rootfs, then prove `cryptsetup`, `dmsetup`, `mkfs.ext4`, and
   `resize2fs` exist in the resulting confidential image;

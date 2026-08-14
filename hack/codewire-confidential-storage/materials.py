@@ -252,9 +252,18 @@ def validate_lock(lock: dict[str, Any]) -> None:
         raise MaterialError("kata_build_contract must be an object")
     require_keys(
         kata,
-        {"input_files", "required_packages", "required_guest_tools"},
+        {
+            "guest_artifact_variant",
+            "input_files",
+            "required_packages",
+            "required_guest_tools",
+        },
         "kata_build_contract",
     )
+    if kata["guest_artifact_variant"] != "ubuntu24.04":
+        raise MaterialError(
+            "Kata guest artifact variant must select the fixed Ubuntu 24.04 image"
+        )
     validate_input_files(kata["input_files"], "kata_build_contract")
     if kata["required_packages"] != ["cryptsetup-bin", "dmsetup", "e2fsprogs"]:
         raise MaterialError(
@@ -463,14 +472,19 @@ def bind_yaml_asset_source(
     }
 
 
-def guest_component_bindings(source: dict[str, Any]) -> dict[str, str]:
+def guest_component_bindings(
+    source: dict[str, Any], artifact_variant: str, platform: str
+) -> dict[str, str]:
     repository = source["repository"].rstrip("/")
     slug = urlparse(repository).path.strip("/").lower()
     registry_root = f"ghcr.io/{slug}"
+    if platform != "linux/amd64":
+        raise MaterialError(f"unsupported guest artifact platform: {platform!r}")
+    artifact_tag = f'{source["revision"]}-{artifact_variant}-amd64'
 
     return {
         "url": f"{repository}/",
-        "version": source["revision"],
+        "version": artifact_tag,
         "container_image": f"{registry_root}/coco-extension",
         "extension_image": f"{registry_root}/coco-extension-disk",
     }
@@ -502,13 +516,15 @@ def prepare_kata(
 ) -> Path:
     clone_exact(lock, "kata_containers", repo, output)
     contract = lock["kata_build_contract"]
+    guest_variant = contract["guest_artifact_variant"]
+    platform = lock["platforms"][0]
     verify_file_contract(output, contract["input_files"], "Kata build contract")
     guest = lock["sources"]["guest_components"]
     patches = [
         bind_yaml_asset_source(
             output / "versions.yaml",
             "coco-guest-components",
-            guest_component_bindings(guest),
+            guest_component_bindings(guest, guest_variant, platform),
             "bind the accepted guest-components source",
         ),
         replace_once(
@@ -528,8 +544,12 @@ def prepare_kata(
 
 def verify_prepared_kata(lock: dict[str, Any], repo: Path) -> None:
     guest = lock["sources"]["guest_components"]
+    guest_variant = lock["kata_build_contract"]["guest_artifact_variant"]
+    platform = lock["platforms"][0]
     versions = (repo / "versions.yaml").read_text(encoding="utf-8")
-    for field, value in guest_component_bindings(guest).items():
+    for field, value in guest_component_bindings(
+        guest, guest_variant, platform
+    ).items():
         expected = f'    {field}: "{value}"'
         if versions.count(expected) != 1:
             raise MaterialError(
