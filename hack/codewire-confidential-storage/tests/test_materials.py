@@ -129,6 +129,8 @@ class MaterialTests(unittest.TestCase):
                     '    description: "test"\n'
                     '    url: "https://github.com/confidential-containers/guest-components/"\n'
                     '    version: "d4dce5ce62294cfa741225f7e5b4527ea276f326"\n'
+                    '    container_image: "ghcr.io/confidential-containers/guest-components/coco-extension"\n'
+                    '    extension_image: "ghcr.io/confidential-containers/guest-components/coco-extension-disk"\n'
                 ),
                 "tools/osbuilder/rootfs-builder/ubuntu/config.sh": (
                     'PACKAGES="base"\nPACKAGES+=" cryptsetup-bin e2fsprogs"\n'
@@ -165,6 +167,14 @@ class MaterialTests(unittest.TestCase):
                 (output / "versions.yaml").read_text(encoding="utf-8"),
             )
             self.assertIn(
+                'container_image: "ghcr.io/noeljackson/guest-components/coco-extension"',
+                (output / "versions.yaml").read_text(encoding="utf-8"),
+            )
+            self.assertIn(
+                'extension_image: "ghcr.io/noeljackson/guest-components/coco-extension-disk"',
+                (output / "versions.yaml").read_text(encoding="utf-8"),
+            )
+            self.assertIn(
                 'PACKAGES+=" cryptsetup-bin dmsetup e2fsprogs"',
                 (output / "tools/osbuilder/rootfs-builder/ubuntu/config.sh").read_text(
                     encoding="utf-8"
@@ -191,7 +201,9 @@ class MaterialTests(unittest.TestCase):
                 "  coco-guest-components:\n"
                 '    url: "https://example.invalid/one"\n'
                 '    version: "0000000000000000000000000000000000000000"\n'
-                '    version: "1111111111111111111111111111111111111111"\n',
+                '    version: "1111111111111111111111111111111111111111"\n'
+                '    container_image: "ghcr.io/example/guest-components/coco-extension"\n'
+                '    extension_image: "ghcr.io/example/guest-components/coco-extension-disk"\n',
                 encoding="utf-8",
             )
             with self.assertRaisesRegex(
@@ -200,8 +212,12 @@ class MaterialTests(unittest.TestCase):
                 materials.bind_yaml_asset_source(
                     path,
                     "coco-guest-components",
-                    "https://github.com/example/guest-components",
-                    "2" * 40,
+                    {
+                        "url": "https://github.com/example/guest-components/",
+                        "version": "2" * 40,
+                        "container_image": "ghcr.io/example/guest-components/coco-extension",
+                        "extension_image": "ghcr.io/example/guest-components/coco-extension-disk",
+                    },
                     "test binding",
                 )
 

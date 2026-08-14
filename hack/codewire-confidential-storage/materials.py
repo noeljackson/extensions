@@ -422,8 +422,7 @@ def replace_once(path: Path, old: str, new: str, description: str) -> dict[str, 
 def bind_yaml_asset_source(
     path: Path,
     asset: str,
-    repository: str,
-    revision: str,
+    fields: dict[str, str],
     description: str,
 ) -> dict[str, str]:
     text = path.read_text(encoding="utf-8")
@@ -436,23 +435,23 @@ def bind_yaml_asset_source(
             f"{description} component block count is {len(blocks)}, expected 1"
         )
 
-    block = blocks[0].group(0)
-    url_pattern = re.compile(r'^    url: "[^"\n]+"$', re.MULTILINE)
-    version_pattern = re.compile(r'^    version: "[0-9a-f]{40}"$', re.MULTILINE)
-    url_count = len(url_pattern.findall(block))
-    version_count = len(version_pattern.findall(block))
-    if url_count != 1 or version_count != 1:
+    updated_block = blocks[0].group(0)
+    counts: dict[str, int] = {}
+    for field, value in fields.items():
+        field_pattern = re.compile(
+            rf'^    {re.escape(field)}: "[^"\n]+"$', re.MULTILINE
+        )
+        counts[field] = len(field_pattern.findall(updated_block))
+        if counts[field] == 1:
+            updated_block = field_pattern.sub(
+                f'    {field}: "{value}"', updated_block, count=1
+            )
+    if any(count != 1 for count in counts.values()):
+        detail = ", ".join(f"{field}={count}" for field, count in counts.items())
         raise MaterialError(
-            f"{description} requires one url and version field; "
-            f"found url={url_count}, version={version_count}"
+            f"{description} requires one of every bound field; found {detail}"
         )
 
-    updated_block = url_pattern.sub(
-        f'    url: "{repository.rstrip("/")}/"', block, count=1
-    )
-    updated_block = version_pattern.sub(
-        f'    version: "{revision}"', updated_block, count=1
-    )
     updated = text[: blocks[0].start()] + updated_block + text[blocks[0].end() :]
     before = hashlib.sha256(text.encode()).hexdigest()
     path.write_text(updated, encoding="utf-8")
@@ -462,6 +461,19 @@ def bind_yaml_asset_source(
         "description": description,
         "before_sha256": before,
         "after_sha256": hashlib.sha256(updated.encode()).hexdigest(),
+    }
+
+
+def guest_component_bindings(source: dict[str, Any]) -> dict[str, str]:
+    repository = source["repository"].rstrip("/")
+    slug = urlparse(repository).path.strip("/").lower()
+    registry_root = f"ghcr.io/{slug}"
+
+    return {
+        "url": f"{repository}/",
+        "version": source["revision"],
+        "container_image": f"{registry_root}/coco-extension",
+        "extension_image": f"{registry_root}/coco-extension-disk",
     }
 
 
@@ -497,8 +509,7 @@ def prepare_kata(
         bind_yaml_asset_source(
             output / "versions.yaml",
             "coco-guest-components",
-            guest["repository"],
-            guest["revision"],
+            guest_component_bindings(guest),
             "bind the accepted guest-components source",
         ),
         replace_once(
@@ -519,13 +530,13 @@ def prepare_kata(
 def verify_prepared_kata(lock: dict[str, Any], repo: Path) -> None:
     guest = lock["sources"]["guest_components"]
     versions = (repo / "versions.yaml").read_text(encoding="utf-8")
-    expected = (
-        f'    url: "{guest["repository"]}/"\n    version: "{guest["revision"]}"\n'
-    )
-    if versions.count(expected) != 1:
-        raise MaterialError(
-            "prepared Kata source does not bind the accepted guest-components input"
-        )
+    for field, value in guest_component_bindings(guest).items():
+        expected = f'    {field}: "{value}"'
+        if versions.count(expected) != 1:
+            raise MaterialError(
+                "prepared Kata source does not bind the accepted "
+                f"guest-components {field}"
+            )
     config = (repo / "tools/osbuilder/rootfs-builder/ubuntu/config.sh").read_text(
         encoding="utf-8"
     )
