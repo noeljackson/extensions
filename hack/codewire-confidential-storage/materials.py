@@ -15,6 +15,7 @@ import struct
 import subprocess
 import sys
 import tarfile
+import tomllib
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
@@ -915,6 +916,7 @@ def verify_kata_extension_layer(data: bytes) -> None:
         "rootfs/usr/local/bin/kata-ctl",
         "rootfs/usr/local/share/codewire/confidential-storage/materials.spdx.json",
         "rootfs/usr/local/share/codewire/confidential-storage/provenance.in-toto.json",
+        "rootfs/usr/local/share/kata-containers/configuration.toml",
         "rootfs/usr/local/share/kata-containers/configuration-qemu-snp.toml",
         "rootfs/usr/local/share/kata-containers/kata-containers-confidential.img",
         "rootfs/usr/local/share/kata-containers/kata-containers-initrd-confidential.img",
@@ -936,6 +938,67 @@ def verify_kata_extension_layer(data: bytes) -> None:
             verify_talos_runtime_elf(stream.read())
     except (OSError, tarfile.TarError) as error:
         raise MaterialError(f"Kata runtime shim is unreadable: {error}") from error
+
+    config_name = "rootfs/usr/local/share/kata-containers/configuration.toml"
+    config_member = by_name.get(config_name)
+    if config_member is None or not config_member.isfile():
+        raise MaterialError("Kata extension commodity runtime config is not a file")
+    try:
+        with tarfile.open(fileobj=io.BytesIO(data), mode="r:*") as layer:
+            stream = layer.extractfile(config_member.name)
+            if stream is None:
+                raise MaterialError(
+                    "Kata extension commodity runtime config is unreadable"
+                )
+            config = tomllib.loads(stream.read().decode("utf-8"))
+    except (OSError, UnicodeDecodeError, tarfile.TarError, tomllib.TOMLDecodeError) as error:
+        raise MaterialError(
+            f"Kata extension commodity runtime config is not valid TOML: {error}"
+        ) from error
+
+    hypervisor = config.get("hypervisor")
+    clh = hypervisor.get("clh") if isinstance(hypervisor, dict) else None
+    if not isinstance(clh, dict):
+        raise MaterialError("Kata extension commodity config lacks hypervisor.clh")
+    if clh.get("path") != "/usr/local/bin/cloud-hypervisor" or clh.get(
+        "valid_hypervisor_paths"
+    ) != ["/usr/local/bin/cloud-hypervisor"]:
+        raise MaterialError("Kata extension commodity config has invalid CLH paths")
+    annotations = clh.get("enable_annotations")
+    if not isinstance(annotations, list) or not {
+        "cc_init_data",
+        "kernel_params",
+    }.issubset(annotations):
+        raise MaterialError(
+            "Kata extension commodity config lacks required annotations"
+        )
+    if any(value in {"*", ".*"} for value in annotations):
+        raise MaterialError(
+            "Kata extension commodity config contains a wildcard annotation"
+        )
+
+    agent = config.get("agent", {}).get("kata")
+    if not isinstance(agent, dict):
+        raise MaterialError("Kata extension commodity config lacks agent.kata")
+    if "dial_timeout" in agent:
+        raise MaterialError(
+            "Kata extension commodity config contains a legacy Go-runtime dial timeout"
+        )
+    dial_timeout_ms = agent.get("dial_timeout_ms")
+    if not isinstance(dial_timeout_ms, int) or dial_timeout_ms <= 0:
+        raise MaterialError(
+            "Kata extension commodity config lacks a runtime-rs dial timeout"
+        )
+
+    runtime = config.get("runtime")
+    if (
+        not isinstance(runtime, dict)
+        or runtime.get("hypervisor_name") != "clh"
+        or runtime.get("agent_name") != "kata"
+    ):
+        raise MaterialError(
+            "Kata extension commodity config is not bound to runtime-rs CLH"
+        )
 
 
 def verify_oci_image(

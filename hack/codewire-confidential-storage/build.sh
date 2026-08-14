@@ -159,7 +159,7 @@ verify_kata_static() (
   require_command readelf
   require_command sfdisk
 
-  local audit_dir image rootfs shim kata_ctl runtime_config cdh_output partition_json sector_size partition_start partition_size
+  local audit_dir image rootfs shim kata_ctl runtime_config commodity_runtime_config cdh_output partition_json sector_size partition_start partition_size
   local program_headers dynamic_tags
   audit_dir="$(new_work_dir)"
   trap 'remove_tree "${audit_dir:-}"' EXIT
@@ -189,6 +189,13 @@ verify_kata_static() (
     || die "runtime-rs QEMU-SNP configuration does not enable confidential guests"
   grep -Fqx 'shared_fs = "none"' "$runtime_config" \
     || die "runtime-rs QEMU-SNP configuration does not preserve shared_fs=none"
+  commodity_runtime_config="$(unique_file "$audit_dir" '*/opt/kata/share/defaults/kata-containers/runtime-rs/configuration-clh-runtime-rs.toml')"
+  grep -Fqx '[hypervisor.clh]' "$commodity_runtime_config" \
+    || die "runtime-rs Cloud Hypervisor configuration lacks its hypervisor table"
+  grep -Eq '^dial_timeout_ms = [1-9][0-9]*$' "$commodity_runtime_config" \
+    || die "runtime-rs Cloud Hypervisor configuration lacks its millisecond dial timeout"
+  ! grep -Eq '^dial_timeout[[:space:]]*=' "$commodity_runtime_config" \
+    || die "runtime-rs Cloud Hypervisor configuration contains a legacy Go-runtime dial timeout"
 
   partition_json="$(sfdisk --json "$image")"
   sector_size="$(jq -er '.partitiontable.sectorsize | select(type == "number" and . > 0)' <<<"$partition_json")"
@@ -241,16 +248,34 @@ overlay_confidential_payload() {
     install -D -m 0644 "$source" "$rootfs/usr/local/share/kata-containers/${destination}"
   done
 
-  source="$static_root/opt/kata/share/defaults/kata-containers/runtime-rs/configuration-qemu-snp-runtime-rs.toml"
-  [[ -f "$source" ]] || die "exact runtime-rs QEMU-SNP configuration is missing from the static payload"
+  source="$(unique_file "$static_root" '*/opt/kata/share/defaults/kata-containers/runtime-rs/configuration-clh-runtime-rs.toml')"
+  install -D -m 0644 "$source" "$rootfs/usr/local/share/kata-containers/configuration.toml"
+  sed -i \
+    -e 's#/opt/kata#/usr/local#g' \
+    "$rootfs/usr/local/share/kata-containers/configuration.toml"
+  grep -Eq '^enable_annotations = .*"cc_init_data"' "$rootfs/usr/local/share/kata-containers/configuration.toml" \
+    || sed -i '/^enable_annotations = / s/]$/, "cc_init_data"]/' \
+      "$rootfs/usr/local/share/kata-containers/configuration.toml"
+
+  grep -Fqx '[hypervisor.clh]' "$rootfs/usr/local/share/kata-containers/configuration.toml" \
+    || die "final commodity configuration lacks its runtime-rs Cloud Hypervisor table"
+  grep -Eq '^dial_timeout_ms = [1-9][0-9]*$' "$rootfs/usr/local/share/kata-containers/configuration.toml" \
+    || die "final commodity configuration lacks its runtime-rs millisecond dial timeout"
+  ! grep -Eq '^dial_timeout[[:space:]]*=' "$rootfs/usr/local/share/kata-containers/configuration.toml" \
+    || die "final commodity configuration contains a legacy Go-runtime dial timeout"
+
+  source="$(unique_file "$static_root" '*/opt/kata/share/defaults/kata-containers/runtime-rs/configuration-qemu-snp-runtime-rs.toml')"
   install -D -m 0644 "$source" "$rootfs/usr/local/share/kata-containers/configuration-qemu-snp.toml"
   sed -i \
     -e 's#/opt/kata#/usr/local#g' \
     -e 's#path = "/usr/local/bin/qemu-system-x86_64"#path = "/usr/local/bin/qemu-system-x86_64-snp-experimental"#' \
     -e 's#valid_hypervisor_paths = \["/usr/local/bin/qemu-system-x86_64"\]#valid_hypervisor_paths = ["/usr/local/bin/qemu-system-x86_64-snp-experimental"]#' \
     -e 's#shared_fs = "virtio-fs"#shared_fs = "none"#' \
-    -e 's#create_container_timeout = 60#create_container_timeout = 180#' \
+    -e 's#create_container_timeout = [0-9][0-9]*#create_container_timeout = 180#' \
     "$rootfs/usr/local/share/kata-containers/configuration-qemu-snp.toml"
+  grep -Eq '^enable_annotations = .*"cc_init_data"' "$rootfs/usr/local/share/kata-containers/configuration-qemu-snp.toml" \
+    || sed -i '/^enable_annotations = / s/]$/, "cc_init_data"]/' \
+      "$rootfs/usr/local/share/kata-containers/configuration-qemu-snp.toml"
 
   local annotations
   annotations="$(sed -nE 's/^enable_annotations = (.*)$/\1/p' "$rootfs/usr/local/share/kata-containers/configuration-qemu-snp.toml")"

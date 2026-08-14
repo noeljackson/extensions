@@ -448,6 +448,35 @@ class MaterialTests(unittest.TestCase):
                     LOCK_PATH, self.lock, "kata-extension", missing_helper
                 )
 
+    def test_kata_extension_rejects_legacy_runtime_config(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            legacy_config_entries = self._kata_extension_entries()
+            legacy_config_entries[
+                "rootfs/usr/local/share/kata-containers/configuration.toml"
+            ] = b'''\
+[hypervisor.clh]
+path = "/usr/local/bin/cloud-hypervisor"
+valid_hypervisor_paths = ["/usr/local/bin/cloud-hypervisor"]
+enable_annotations = ["kernel_params", "cc_init_data"]
+[agent.kata]
+dial_timeout = 45
+[runtime]
+hypervisor_name = "clh"
+agent_name = "kata"
+'''
+            legacy_config, _ = self._write_oci_archive(
+                root / "legacy-config",
+                component="kata-extension",
+                layer_entries=legacy_config_entries,
+            )
+            with self.assertRaisesRegex(
+                materials.MaterialError, "legacy Go-runtime dial timeout"
+            ):
+                materials.verify_oci_image(
+                    LOCK_PATH, self.lock, "kata-extension", legacy_config
+                )
+
     def test_talos_extension_tree_has_exact_top_level_contract(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -704,6 +733,17 @@ class MaterialTests(unittest.TestCase):
             "rootfs/usr/local/bin/kata-ctl": b"kata-ctl",
             "rootfs/usr/local/share/codewire/confidential-storage/materials.spdx.json": b"{}\n",
             "rootfs/usr/local/share/codewire/confidential-storage/provenance.in-toto.json": b"{}\n",
+            "rootfs/usr/local/share/kata-containers/configuration.toml": b'''\
+[hypervisor.clh]
+path = "/usr/local/bin/cloud-hypervisor"
+valid_hypervisor_paths = ["/usr/local/bin/cloud-hypervisor"]
+enable_annotations = ["kernel_params", "cc_init_data"]
+[agent.kata]
+dial_timeout_ms = 10
+[runtime]
+hypervisor_name = "clh"
+agent_name = "kata"
+''',
             "rootfs/usr/local/share/kata-containers/configuration-qemu-snp.toml": b'shared_fs = "none"\n',
             "rootfs/usr/local/share/kata-containers/kata-containers-confidential.img": b"image",
             "rootfs/usr/local/share/kata-containers/kata-containers-initrd-confidential.img": b"initrd",
