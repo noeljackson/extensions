@@ -841,6 +841,7 @@ def verify_kata_extension_layer(data: bytes) -> None:
     required = {
         "rootfs/usr/local/bin/containerd-shim-kata-v2",
         "rootfs/usr/local/bin/containerd-shim-kata-qemu-snp-v2",
+        "rootfs/usr/local/bin/kata-ctl",
         "rootfs/usr/local/share/codewire/confidential-storage/materials.spdx.json",
         "rootfs/usr/local/share/codewire/confidential-storage/provenance.in-toto.json",
         "rootfs/usr/local/share/kata-containers/configuration-qemu-snp.toml",

@@ -13,7 +13,8 @@ kata_parallel_targets=(
   kernel-tarball
   ovmf-sev-tarball
   qemu-snp-experimental-tarball
-  shim-v2-go-tarball
+  shim-v2-rust-tarball
+  kata-ctl-tarball
   serial-targets
 )
 kata_serial_targets=(
@@ -26,7 +27,8 @@ kata_final_inputs=(
   kata-static-qemu-snp-experimental.tar.zst
   kata-static-rootfs-image-confidential.tar.zst
   kata-static-rootfs-initrd-confidential.tar.zst
-  kata-static-shim-v2-go.tar.zst
+  kata-static-shim-v2-rust.tar.zst
+  kata-static-kata-ctl.tar.zst
 )
 
 usage() {
@@ -157,14 +159,14 @@ verify_kata_static() (
   require_command readelf
   require_command sfdisk
 
-  local audit_dir image rootfs shim cdh_output partition_json sector_size partition_start partition_size
+  local audit_dir image rootfs shim kata_ctl cdh_output partition_json sector_size partition_start partition_size
   local program_headers dynamic_tags
   audit_dir="$(new_work_dir)"
   trap 'remove_tree "${audit_dir:-}"' EXIT
   tar --zstd -xf "$tarball" -C "$audit_dir"
   image="$(unique_file "$audit_dir" '*/opt/kata/share/kata-containers/kata-containers-confidential.img')"
   shim="$(unique_file "$audit_dir" '*/opt/kata/bin/containerd-shim-kata-v2')"
-  [[ -x "$shim" ]] || die "exact Kata runtime shim is not executable"
+  [[ -x "$shim" ]] || die "exact Kata runtime-rs shim is not executable"
   program_headers="$(LC_ALL=C readelf -l "$shim")" \
     || die "exact Kata runtime shim has unreadable program headers"
   if grep -Eq 'INTERP|Requesting program interpreter' <<<"$program_headers"; then
@@ -175,6 +177,8 @@ verify_kata_static() (
   if grep -q '(NEEDED)' <<<"$dynamic_tags"; then
     die "exact Kata runtime shim has dynamic library dependencies"
   fi
+  kata_ctl="$(unique_file "$audit_dir" '*/opt/kata/bin/kata-ctl')"
+  [[ -x "$kata_ctl" ]] || die "exact Kata runtime-rs volume helper is not executable"
 
   partition_json="$(sfdisk --json "$image")"
   sector_size="$(jq -er '.partitiontable.sectorsize | select(type == "number" and . > 0)' <<<"$partition_json")"
@@ -213,6 +217,9 @@ overlay_confidential_payload() {
   source="$(unique_file "$static_root" '*/opt/kata/bin/containerd-shim-kata-v2')"
   install -D -m 0755 "$source" "$rootfs/usr/local/bin/containerd-shim-kata-v2"
   ln -sfn containerd-shim-kata-v2 "$rootfs/usr/local/bin/containerd-shim-kata-qemu-snp-v2"
+
+  source="$(unique_file "$static_root" '*/opt/kata/bin/kata-ctl')"
+  install -D -m 0755 "$source" "$rootfs/usr/local/bin/kata-ctl"
 
   for destination in \
     kata-containers-confidential.img \
