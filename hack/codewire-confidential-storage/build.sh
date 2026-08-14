@@ -159,13 +159,13 @@ verify_kata_static() (
   require_command readelf
   require_command sfdisk
 
-  local audit_dir image rootfs shim kata_ctl cdh_output partition_json sector_size partition_start partition_size
+  local audit_dir image rootfs shim kata_ctl runtime_config cdh_output partition_json sector_size partition_start partition_size
   local program_headers dynamic_tags
   audit_dir="$(new_work_dir)"
   trap 'remove_tree "${audit_dir:-}"' EXIT
   tar --zstd -xf "$tarball" -C "$audit_dir"
   image="$(unique_file "$audit_dir" '*/opt/kata/share/kata-containers/kata-containers-confidential.img')"
-  shim="$(unique_file "$audit_dir" '*/opt/kata/bin/containerd-shim-kata-v2')"
+  shim="$(unique_file "$audit_dir" '*/opt/kata/runtime-rs/bin/containerd-shim-kata-v2')"
   [[ -x "$shim" ]] || die "exact Kata runtime-rs shim is not executable"
   program_headers="$(LC_ALL=C readelf -l "$shim")" \
     || die "exact Kata runtime shim has unreadable program headers"
@@ -177,8 +177,18 @@ verify_kata_static() (
   if grep -q '(NEEDED)' <<<"$dynamic_tags"; then
     die "exact Kata runtime shim has dynamic library dependencies"
   fi
+  if find "$audit_dir" -type f -path '*/opt/kata/bin/containerd-shim-kata-v2' -print -quit | grep -q .; then
+    die "Kata static tarball unexpectedly contains the deprecated Go runtime shim"
+  fi
   kata_ctl="$(unique_file "$audit_dir" '*/opt/kata/bin/kata-ctl')"
   [[ -x "$kata_ctl" ]] || die "exact Kata runtime-rs volume helper is not executable"
+  runtime_config="$(unique_file "$audit_dir" '*/opt/kata/share/defaults/kata-containers/runtime-rs/configuration-qemu-snp-runtime-rs.toml')"
+  grep -Fqx '[hypervisor.qemu]' "$runtime_config" \
+    || die "runtime-rs QEMU-SNP configuration lacks its hypervisor table"
+  grep -Fqx 'confidential_guest = true' "$runtime_config" \
+    || die "runtime-rs QEMU-SNP configuration does not enable confidential guests"
+  grep -Fqx 'shared_fs = "none"' "$runtime_config" \
+    || die "runtime-rs QEMU-SNP configuration does not preserve shared_fs=none"
 
   partition_json="$(sfdisk --json "$image")"
   sector_size="$(jq -er '.partitiontable.sectorsize | select(type == "number" and . > 0)' <<<"$partition_json")"
@@ -214,11 +224,13 @@ overlay_confidential_payload() {
   local rootfs=$2
   local source destination
 
-  source="$(unique_file "$static_root" '*/opt/kata/bin/containerd-shim-kata-v2')"
+  source="$static_root/opt/kata/runtime-rs/bin/containerd-shim-kata-v2"
+  [[ -x "$source" ]] || die "exact Kata runtime-rs shim is missing from the static payload"
   install -D -m 0755 "$source" "$rootfs/usr/local/bin/containerd-shim-kata-v2"
   ln -sfn containerd-shim-kata-v2 "$rootfs/usr/local/bin/containerd-shim-kata-qemu-snp-v2"
 
-  source="$(unique_file "$static_root" '*/opt/kata/bin/kata-ctl')"
+  source="$static_root/opt/kata/bin/kata-ctl"
+  [[ -x "$source" ]] || die "exact kata-ctl is missing from the static payload"
   install -D -m 0755 "$source" "$rootfs/usr/local/bin/kata-ctl"
 
   for destination in \
@@ -229,7 +241,8 @@ overlay_confidential_payload() {
     install -D -m 0644 "$source" "$rootfs/usr/local/share/kata-containers/${destination}"
   done
 
-  source="$(unique_file "$static_root" '*/opt/kata/share/defaults/kata-containers/configuration-qemu-snp.toml')"
+  source="$static_root/opt/kata/share/defaults/kata-containers/runtime-rs/configuration-qemu-snp-runtime-rs.toml"
+  [[ -f "$source" ]] || die "exact runtime-rs QEMU-SNP configuration is missing from the static payload"
   install -D -m 0644 "$source" "$rootfs/usr/local/share/kata-containers/configuration-qemu-snp.toml"
   sed -i \
     -e 's#/opt/kata#/usr/local#g' \

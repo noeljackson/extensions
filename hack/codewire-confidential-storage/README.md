@@ -35,8 +35,10 @@ does not consult mutable operating-system repositories.
   container-runtime pseudo-files, require exactly `manifest.yaml` plus
   `rootfs/`, and overlay the exact confidential payload inside that `rootfs/`;
 - build only the Dev SNP artifact closure (agent, CDH, kernel, SEV firmware,
-  SNP QEMU, runtime-rs shim, `kata-ctl`, and confidential image/initrd), excluding unrelated
-  hypervisors and distro images from both failure scope and the final tarball;
+  SNP QEMU, runtime-rs shim, `kata-ctl`, and confidential image/initrd), excluding
+  unrelated hypervisors and distro images from both failure scope and the final
+  tarball; the verifier requires the runtime-rs shim and QEMU-SNP configuration
+  at their canonical archive paths and rejects a deprecated Go-runtime shim;
 - build the host Kata shim with the static runtime profile and reject any
   static tarball or final extension layer whose shim contains `PT_INTERP` or
   `DT_NEEDED`, preserving the Talos host ABI;
