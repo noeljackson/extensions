@@ -33,8 +33,8 @@ class MaterialTests(unittest.TestCase):
                 "8468a2595cf7522e769ed33f62fb27e266137108",
             ),
             "kata_containers": (
-                "90cebe892d89894d67f561c256a51365d0c3ac0e",
-                "a7b3e03b02bece57ce7849780f304bf85aa5f014",
+                "a5c9b94e5cbfd0cb27c51a58be49dedb5ca61692",
+                "283e00978b7e95dbb6943f41fb792c57f3d1bdd1",
             ),
             "longhorn_manager": (
                 "1cfcebd4ac6f7fc8c9b29158e126c36872eb4950",
@@ -146,7 +146,10 @@ class MaterialTests(unittest.TestCase):
                     'PACKAGES="base"\nPACKAGES+=" cryptsetup-bin e2fsprogs"\n'
                 ),
                 "tools/packaging/kata-deploy/local-build/Makefile": "all:\n\ttrue\n",
-                "tools/packaging/kata-deploy/local-build/kata-deploy-binaries.sh": "test\n",
+                "tools/packaging/kata-deploy/local-build/kata-deploy-binaries.sh": (
+                    'digest="$(resolve_oci_artifact_manifest '
+                    '"${disk_image_ref}" "${go_arch}")"\n'
+                ),
                 "tools/packaging/static-build/coco-guest-components/Dockerfile": "FROM scratch\n",
                 "tools/packaging/static-build/coco-guest-components/build-static-coco-guest-components.sh": "test\n",
                 "tools/packaging/static-build/coco-guest-components/build.sh": "test\n",
@@ -195,6 +198,20 @@ class MaterialTests(unittest.TestCase):
                     encoding="utf-8"
                 ),
             )
+            packaging = (
+                output
+                / "tools/packaging/kata-deploy/local-build/kata-deploy-binaries.sh"
+            )
+            packaging.write_text(
+                'digest="$(oras resolve --platform "linux/${go_arch}" '
+                '"${disk_image_ref}")"\n',
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(
+                materials.MaterialError,
+                "select the CoCo disk manifest explicitly",
+            ):
+                materials.verify_prepared_kata(lock, output)
 
     def test_prepare_kata_refuses_unknown_base_text(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -320,7 +337,7 @@ class MaterialTests(unittest.TestCase):
                 )
                 text = (first / name).read_text(encoding="utf-8")
                 self.assertNotRegex(text.lower(), r"password|private_key|admin_token")
-                self.assertIn("90cebe892d89894d67f561c256a51365d0c3ac0e", text)
+                self.assertIn("a5c9b94e5cbfd0cb27c51a58be49dedb5ca61692", text)
 
     def test_oci_subject_uses_platform_manifest_and_checks_attestations(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -448,6 +465,58 @@ class MaterialTests(unittest.TestCase):
                     LOCK_PATH, self.lock, "kata-extension", missing_helper
                 )
 
+    def test_kata_extension_requires_every_configured_guest_image(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            image_path = (
+                "rootfs/usr/local/share/kata-containers/"
+                "kata-containers-coco-extension.img"
+            )
+            for name, payload in (("missing", None), ("empty", b"")):
+                with self.subTest(name=name):
+                    entries = self._kata_extension_entries()
+                    if payload is None:
+                        del entries[image_path]
+                    else:
+                        entries[image_path] = payload
+                    archive, _ = self._write_oci_archive(
+                        root / name,
+                        component="kata-extension",
+                        layer_entries=entries,
+                    )
+                    with self.assertRaisesRegex(
+                        materials.MaterialError,
+                        "required payload|lacks non-empty configured guest image",
+                    ):
+                        materials.verify_oci_image(
+                            LOCK_PATH, self.lock, "kata-extension", archive
+                        )
+
+            wrong_path_entries = self._kata_extension_entries()
+            wrong_path_entries[
+                "rootfs/usr/local/share/kata-containers/configuration-qemu-snp.toml"
+            ] = b'''\
+[hypervisor.qemu]
+confidential_guest = true
+shared_fs = "none"
+[[hypervisor.qemu.guest_extension_images]]
+name = "coco"
+path = "/usr/local/share/kata-containers/not-the-coco-image.img"
+verity_params = ""
+'''
+            wrong_path, _ = self._write_oci_archive(
+                root / "wrong-path",
+                component="kata-extension",
+                layer_entries=wrong_path_entries,
+            )
+            with self.assertRaisesRegex(
+                materials.MaterialError,
+                "lacks non-empty configured guest image",
+            ):
+                materials.verify_oci_image(
+                    LOCK_PATH, self.lock, "kata-extension", wrong_path
+                )
+
     def test_kata_extension_rejects_legacy_runtime_config(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -517,6 +586,12 @@ agent_name = "kata"
         self.assertIn('runtime_abi:"static"', recipe)
         self.assertIn("\\( -type f -o -type l \\)", recipe)
         self.assertIn("rootfs-image-confidential-tarball", recipe)
+        self.assertIn("rootfs-image-coco-extension-tarball", recipe)
+        self.assertIn("kata-static-rootfs-image-coco-extension.tar.zst", recipe)
+        self.assertIn("kata-containers-coco-extension.img", recipe)
+        self.assertIn("has_executable_mode", recipe)
+        self.assertNotIn('[[ -x "$shim" ]]', recipe)
+        self.assertNotIn('[[ -x "$kata_ctl" ]]', recipe)
         self.assertIn("rootfs-initrd-confidential-tarball", recipe)
         self.assertIn("qemu-snp-experimental-tarball", recipe)
         self.assertIn("sfdisk --json", recipe)
@@ -744,8 +819,17 @@ dial_timeout_ms = 10
 hypervisor_name = "clh"
 agent_name = "kata"
 ''',
-            "rootfs/usr/local/share/kata-containers/configuration-qemu-snp.toml": b'shared_fs = "none"\n',
+            "rootfs/usr/local/share/kata-containers/configuration-qemu-snp.toml": b'''\
+[hypervisor.qemu]
+confidential_guest = true
+shared_fs = "none"
+[[hypervisor.qemu.guest_extension_images]]
+name = "coco"
+path = "/usr/local/share/kata-containers/kata-containers-coco-extension.img"
+verity_params = ""
+''',
             "rootfs/usr/local/share/kata-containers/kata-containers-confidential.img": b"image",
+            "rootfs/usr/local/share/kata-containers/kata-containers-coco-extension.img": b"coco-image",
             "rootfs/usr/local/share/kata-containers/kata-containers-initrd-confidential.img": b"initrd",
             "rootfs/usr/local/share/kata-containers/root_hash_confidential.txt": b"hash\n",
         }

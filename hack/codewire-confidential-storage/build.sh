@@ -19,6 +19,7 @@ kata_parallel_targets=(
 )
 kata_serial_targets=(
   rootfs-image-confidential-tarball
+  rootfs-image-coco-extension-tarball
   rootfs-initrd-confidential-tarball
 )
 kata_final_inputs=(
@@ -26,6 +27,7 @@ kata_final_inputs=(
   kata-static-ovmf-sev.tar.zst
   kata-static-qemu-snp-experimental.tar.zst
   kata-static-rootfs-image-confidential.tar.zst
+  kata-static-rootfs-image-coco-extension.tar.zst
   kata-static-rootfs-initrd-confidential.tar.zst
   kata-static-shim-v2-rust.tar.zst
   kata-static-kata-ctl.tar.zst
@@ -134,6 +136,14 @@ unique_file() {
   printf '%s\n' "${matches[0]}"
 }
 
+has_executable_mode() {
+  local path=$1
+  local mode
+  [[ -f "$path" ]] || return 1
+  mode="$(stat -c '%a' -- "$path")" || return 1
+  (( (8#$mode & 0111) != 0 ))
+}
+
 debugfs_has_any() {
   local image=$1
   local name=$2
@@ -159,14 +169,17 @@ verify_kata_static() (
   require_command readelf
   require_command sfdisk
 
-  local audit_dir image rootfs shim kata_ctl runtime_config commodity_runtime_config cdh_output partition_json sector_size partition_start partition_size
+  local audit_dir image coco_extension_image rootfs shim kata_ctl runtime_config commodity_runtime_config cdh_output partition_json sector_size partition_start partition_size
   local program_headers dynamic_tags
   audit_dir="$(new_work_dir)"
   trap 'remove_tree "${audit_dir:-}"' EXIT
   tar --zstd -xf "$tarball" -C "$audit_dir"
   image="$(unique_file "$audit_dir" '*/opt/kata/share/kata-containers/kata-containers-confidential.img')"
+  coco_extension_image="$(unique_file "$audit_dir" '*/opt/kata/share/kata-containers/kata-containers-coco-extension.img')"
+  [[ -f "$coco_extension_image" && -s "$coco_extension_image" ]] || \
+    die "Kata static tarball has no non-empty CoCo guest extension image"
   shim="$(unique_file "$audit_dir" '*/opt/kata/runtime-rs/bin/containerd-shim-kata-v2')"
-  [[ -x "$shim" ]] || die "exact Kata runtime-rs shim is not executable"
+  has_executable_mode "$shim" || die "exact Kata runtime-rs shim has no executable mode bit"
   program_headers="$(LC_ALL=C readelf -l "$shim")" \
     || die "exact Kata runtime shim has unreadable program headers"
   if grep -Eq 'INTERP|Requesting program interpreter' <<<"$program_headers"; then
@@ -181,7 +194,7 @@ verify_kata_static() (
     die "Kata static tarball unexpectedly contains the deprecated Go runtime shim"
   fi
   kata_ctl="$(unique_file "$audit_dir" '*/opt/kata/bin/kata-ctl')"
-  [[ -x "$kata_ctl" ]] || die "exact Kata runtime-rs volume helper is not executable"
+  has_executable_mode "$kata_ctl" || die "exact Kata runtime-rs volume helper has no executable mode bit"
   runtime_config="$(unique_file "$audit_dir" '*/opt/kata/share/defaults/kata-containers/runtime-rs/configuration-qemu-snp-runtime-rs.toml')"
   grep -Fqx '[hypervisor.qemu]' "$runtime_config" \
     || die "runtime-rs QEMU-SNP configuration lacks its hypervisor table"
@@ -189,6 +202,8 @@ verify_kata_static() (
     || die "runtime-rs QEMU-SNP configuration does not enable confidential guests"
   grep -Fqx 'shared_fs = "none"' "$runtime_config" \
     || die "runtime-rs QEMU-SNP configuration does not preserve shared_fs=none"
+  grep -Fqx 'path = "/opt/kata/share/kata-containers/kata-containers-coco-extension.img"' "$runtime_config" \
+    || die "runtime-rs QEMU-SNP configuration does not consume the built CoCo guest extension image"
   commodity_runtime_config="$(unique_file "$audit_dir" '*/opt/kata/share/defaults/kata-containers/runtime-rs/configuration-clh-runtime-rs.toml')"
   grep -Fqx '[hypervisor.clh]' "$commodity_runtime_config" \
     || die "runtime-rs Cloud Hypervisor configuration lacks its hypervisor table"
@@ -232,16 +247,17 @@ overlay_confidential_payload() {
   local source destination
 
   source="$static_root/opt/kata/runtime-rs/bin/containerd-shim-kata-v2"
-  [[ -x "$source" ]] || die "exact Kata runtime-rs shim is missing from the static payload"
+  has_executable_mode "$source" || die "exact Kata runtime-rs shim is missing or has no executable mode bit"
   install -D -m 0755 "$source" "$rootfs/usr/local/bin/containerd-shim-kata-v2"
   ln -sfn containerd-shim-kata-v2 "$rootfs/usr/local/bin/containerd-shim-kata-qemu-snp-v2"
 
   source="$static_root/opt/kata/bin/kata-ctl"
-  [[ -x "$source" ]] || die "exact kata-ctl is missing from the static payload"
+  has_executable_mode "$source" || die "exact kata-ctl is missing or has no executable mode bit"
   install -D -m 0755 "$source" "$rootfs/usr/local/bin/kata-ctl"
 
   for destination in \
     kata-containers-confidential.img \
+    kata-containers-coco-extension.img \
     kata-containers-initrd-confidential.img \
     root_hash_confidential.txt; do
     source="$(unique_file "$static_root" "*/opt/kata/share/kata-containers/${destination}")"
@@ -287,6 +303,9 @@ overlay_confidential_payload() {
   fi
   grep -Eq '^shared_fs = "none"$' "$rootfs/usr/local/share/kata-containers/configuration-qemu-snp.toml" \
     || die "QEMU-SNP configuration does not preserve shared_fs=none"
+  grep -Fqx 'path = "/usr/local/share/kata-containers/kata-containers-coco-extension.img"' \
+    "$rootfs/usr/local/share/kata-containers/configuration-qemu-snp.toml" \
+    || die "QEMU-SNP configuration does not consume the overlaid CoCo guest extension image"
 }
 
 command=${1:-}
