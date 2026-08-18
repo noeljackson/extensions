@@ -37,8 +37,8 @@ class MaterialTests(unittest.TestCase):
                 "283e00978b7e95dbb6943f41fb792c57f3d1bdd1",
             ),
             "longhorn_manager": (
-                "1cfcebd4ac6f7fc8c9b29158e126c36872eb4950",
-                "bb48a40cc04bdffee4f68927ad2134ca71e36b4d",
+                "4871f7092d048bdae99880006cd6add84f896f6a",
+                "5010190ec59786c01a3b27431805018a09aa3be9",
             ),
             "trustee": (
                 "258ea4acb7b9bd865fce5c63a539f2120dba8298",
