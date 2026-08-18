@@ -38,10 +38,12 @@ does not consult mutable operating-system repositories.
   runtime-rs archive, then parse the final OCI config and reject legacy
   Go-runtime fields before publication;
 - build only the Dev SNP artifact closure (agent, CDH, kernel, SEV firmware,
-  SNP QEMU, runtime-rs shim, `kata-ctl`, and confidential image/initrd), excluding
+  SNP QEMU, runtime-rs shim, `kata-ctl`, confidential image/initrd, and the
+  composable CoCo guest-extension disk), excluding
   unrelated hypervisors and distro images from both failure scope and the final
-  tarball; the verifier requires the runtime-rs shim and QEMU-SNP configuration
-  at their canonical archive paths and rejects a deprecated Go-runtime shim;
+  tarball; the verifier requires the runtime-rs shim, QEMU-SNP configuration,
+  and every configured guest-extension image at their canonical archive paths
+  and rejects a deprecated Go-runtime shim;
 - build the host Kata shim with the static runtime profile and reject any
   static tarball or final extension layer whose shim contains `PT_INTERP` or
   `DT_NEEDED`, preserving the Talos host ABI;
@@ -80,9 +82,9 @@ The expensive amd64 recipe is deliberately separate from publication:
 Set `CODEWIRE_CONFIDENTIAL_STORAGE_SCRATCH_ROOT` to an absolute, dedicated
 directory when `/tmp` is too small for the Kata source and build outputs. The
 recipe only removes its own `codewire-confidential-storage.*` children directly
-beneath that root. The scratch filesystem must also permit execution because
-the archive verifier checks and runs exact build artifacts; use an executable
-workspace when `/tmp` is mounted `noexec`.
+beneath that root. The archive verifier checks executable mode bits directly,
+so a `noexec` scratch mount does not make a correctly packaged executable look
+invalid.
 
 The outputs are local OCI archives plus non-secret material receipts. Publishing
 them is OP-1 and requires its separate action-scoped authority. Never replace a

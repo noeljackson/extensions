@@ -571,6 +571,22 @@ def verify_prepared_kata(lock: dict[str, Any], repo: Path) -> None:
             raise MaterialError(
                 f"prepared Kata source lacks required package {package}"
             )
+    packaging = (
+        repo
+        / "tools/packaging/kata-deploy/local-build/kata-deploy-binaries.sh"
+    ).read_text(encoding="utf-8")
+    resolver_call = (
+        'digest="$(resolve_oci_artifact_manifest '
+        '"${disk_image_ref}" "${go_arch}")"'
+    )
+    if packaging.count(resolver_call) != 1:
+        raise MaterialError(
+            "prepared Kata source does not select the CoCo disk manifest explicitly"
+        )
+    if 'oras resolve --platform "linux/${go_arch}" "${disk_image_ref}"' in packaging:
+        raise MaterialError(
+            "prepared Kata source asks ORAS to infer a platform from an artifact config"
+        )
 
 
 def prepare_longhorn(
@@ -919,6 +935,7 @@ def verify_kata_extension_layer(data: bytes) -> None:
         "rootfs/usr/local/share/kata-containers/configuration.toml",
         "rootfs/usr/local/share/kata-containers/configuration-qemu-snp.toml",
         "rootfs/usr/local/share/kata-containers/kata-containers-confidential.img",
+        "rootfs/usr/local/share/kata-containers/kata-containers-coco-extension.img",
         "rootfs/usr/local/share/kata-containers/kata-containers-initrd-confidential.img",
         "rootfs/usr/local/share/kata-containers/root_hash_confidential.txt",
     }
@@ -998,6 +1015,70 @@ def verify_kata_extension_layer(data: bytes) -> None:
     ):
         raise MaterialError(
             "Kata extension commodity config is not bound to runtime-rs CLH"
+        )
+
+    qemu_config_name = (
+        "rootfs/usr/local/share/kata-containers/configuration-qemu-snp.toml"
+    )
+    qemu_config_member = by_name[qemu_config_name]
+    if not qemu_config_member.isfile():
+        raise MaterialError("Kata extension QEMU-SNP runtime config is not a file")
+    try:
+        with tarfile.open(fileobj=io.BytesIO(data), mode="r:*") as layer:
+            stream = layer.extractfile(qemu_config_member.name)
+            if stream is None:
+                raise MaterialError(
+                    "Kata extension QEMU-SNP runtime config is unreadable"
+                )
+            qemu_config = tomllib.loads(stream.read().decode("utf-8"))
+    except (OSError, UnicodeDecodeError, tarfile.TarError, tomllib.TOMLDecodeError) as error:
+        raise MaterialError(
+            f"Kata extension QEMU-SNP runtime config is not valid TOML: {error}"
+        ) from error
+
+    qemu_hypervisors = qemu_config.get("hypervisor")
+    qemu_hypervisor = (
+        qemu_hypervisors.get("qemu") if isinstance(qemu_hypervisors, dict) else None
+    )
+    if not isinstance(qemu_hypervisor, dict):
+        raise MaterialError("Kata extension QEMU-SNP config lacks hypervisor.qemu")
+    if qemu_hypervisor.get("confidential_guest") is not True:
+        raise MaterialError("Kata extension QEMU-SNP config is not confidential")
+    if qemu_hypervisor.get("shared_fs") != "none":
+        raise MaterialError("Kata extension QEMU-SNP config does not use shared_fs=none")
+    guest_images = qemu_hypervisor.get("guest_extension_images")
+    if not isinstance(guest_images, list) or not guest_images:
+        raise MaterialError("Kata extension QEMU-SNP config has no guest extension images")
+
+    expected_coco_path = (
+        "/usr/local/share/kata-containers/kata-containers-coco-extension.img"
+    )
+    found_coco = False
+    for image in guest_images:
+        if not isinstance(image, dict):
+            raise MaterialError("Kata extension QEMU-SNP guest image is not an object")
+        name = image.get("name")
+        path = image.get("path")
+        if not isinstance(name, str) or not name or not isinstance(path, str):
+            raise MaterialError("Kata extension QEMU-SNP guest image is incomplete")
+        if (
+            not path.startswith("/usr/local/share/kata-containers/")
+            or ".." in Path(path).parts
+        ):
+            raise MaterialError(
+                f"Kata extension QEMU-SNP guest image has unsafe path {path!r}"
+            )
+        member_name = f"rootfs{path}"
+        image_member = by_name.get(member_name)
+        if image_member is None or not image_member.isfile() or image_member.size <= 0:
+            raise MaterialError(
+                f"Kata extension lacks non-empty configured guest image {path}"
+            )
+        if name == "coco" and path == expected_coco_path:
+            found_coco = True
+    if not found_coco:
+        raise MaterialError(
+            "Kata extension QEMU-SNP config lacks the canonical CoCo guest image"
         )
 
 

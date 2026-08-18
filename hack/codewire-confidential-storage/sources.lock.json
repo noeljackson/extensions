@@ -3,7 +3,7 @@
   "platforms": [
     "linux/amd64"
   ],
-  "source_date_epoch": 1786744683,
+  "source_date_epoch": 1787078004,
   "sources": {
     "extensions": {
       "repository": "https://github.com/noeljackson/extensions",
@@ -29,13 +29,13 @@
     },
     "kata_containers": {
       "repository": "https://github.com/noeljackson/kata-containers",
-      "revision": "90cebe892d89894d67f561c256a51365d0c3ac0e",
-      "tree": "a7b3e03b02bece57ce7849780f304bf85aa5f014",
-      "source_date_epoch": 1786744683,
+      "revision": "a5c9b94e5cbfd0cb27c51a58be49dedb5ca61692",
+      "tree": "283e00978b7e95dbb6943f41fb792c57f3d1bdd1",
+      "source_date_epoch": 1787078004,
       "archive": {
-        "url": "https://codeload.github.com/noeljackson/kata-containers/tar.gz/90cebe892d89894d67f561c256a51365d0c3ac0e",
-        "sha256": "1d1eb176e072ac3a3d041d4d486707cd626928805b7e1f4aed710f3f7e593017",
-        "sha512": "473e6a6bc282d75e2e4de739d170e8e0a689c6b5b5f5191d3121dc0df6f393bfe5942afea9459d12f8df11b160e0049b52080378a18dcb5456f09255f6174636"
+        "url": "https://codeload.github.com/noeljackson/kata-containers/tar.gz/a5c9b94e5cbfd0cb27c51a58be49dedb5ca61692",
+        "sha256": "21637bea7b5e77fc69e6efe067327ba8678d2af46949f5a96f4abbe379b21dba",
+        "sha512": "4289b77ca19a345f132bf585a779977c3f4b58a2a4951e5d34009f452a1fca1e0e126d3d4e6a056385e0577a1fdd6914edb3d56293e544465f0b791e23b325f3"
       }
     },
     "longhorn_manager": {
@@ -97,7 +97,7 @@
     "input_files": {
       "tools/osbuilder/rootfs-builder/ubuntu/config.sh": "0f40cd9ee3b6bcf4b456c2bd252df54891e96cee81b9b2066948f2fddfd783ea",
       "tools/packaging/kata-deploy/local-build/Makefile": "076ac56cbbf96b21b2bb1bf9ac7ebd37b14ed42e1fd9a82784687ca10b7cc39c",
-      "tools/packaging/kata-deploy/local-build/kata-deploy-binaries.sh": "debde23eb2370f17977e408a010c04e52cf966e14f452bbcef0fda4c39bd4d1a",
+      "tools/packaging/kata-deploy/local-build/kata-deploy-binaries.sh": "b4656af57f4e323a262c8a5a427578b2713940cb6594c16bbd19ed774c9df24e",
       "tools/packaging/static-build/coco-guest-components/Dockerfile": "f042732a43ad870a5bf2c68717d1c632f67fd35e12113594015eedd9510f85f9",
       "tools/packaging/static-build/coco-guest-components/build-static-coco-guest-components.sh": "b3c64211d3115c94ed317a3cb8b219e5bb7cd7de03fe73699dabcec1ad2468e8",
       "tools/packaging/static-build/coco-guest-components/build.sh": "598b32f3891be7c20c12bccdadbf634aca1c26b50ec72b724ee304c4420dff75",
