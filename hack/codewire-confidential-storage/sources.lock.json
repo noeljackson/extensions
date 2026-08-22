@@ -3,7 +3,7 @@
   "platforms": [
     "linux/amd64"
   ],
-  "source_date_epoch": 1787418354,
+  "source_date_epoch": 1787435839,
   "sources": {
     "extensions": {
       "repository": "https://github.com/noeljackson/extensions",
@@ -29,13 +29,13 @@
     },
     "kata_containers": {
       "repository": "https://github.com/noeljackson/kata-containers",
-      "revision": "e7438835dd7c0af2befb441e50fd2859751f0c2e",
-      "tree": "0f6a98463e63743f669ea986f01eed92155a1703",
-      "source_date_epoch": 1787418354,
+      "revision": "8fb41f366ceb83b173a2485c05bf2b2176a251ee",
+      "tree": "481f715a24ddbee81e51903cf3977d90983d1910",
+      "source_date_epoch": 1787435839,
       "archive": {
-        "url": "https://codeload.github.com/noeljackson/kata-containers/tar.gz/e7438835dd7c0af2befb441e50fd2859751f0c2e",
-        "sha256": "b7655c2a7038f0b636fbf29987070ce8b1eb28baef60d4e1b76864c97de2bcf3",
-        "sha512": "6123b7cba97f38e8dee976ea90f8c7cd23e12b42c6d7fcfdde82af20a54250ab0bf4c1f9f2e3df8d69e16b952298d6fc57953546c408ac36a69b7bed8c711885"
+        "url": "https://codeload.github.com/noeljackson/kata-containers/tar.gz/8fb41f366ceb83b173a2485c05bf2b2176a251ee",
+        "sha256": "61fb9b7d706bfcfb80c0d830817ad58c8af2e13e03284019a09a7736909d7e38",
+        "sha512": "c6a786ab38c1ffd5e94957ba6a22b7bd1b3350a0f56e359677aec051d26b21f48358550f0d70d9108032afb422b933517a1ad5ac36fddd31fdf6d0c5103300fa"
       }
     },
     "longhorn_manager": {
@@ -95,6 +95,8 @@
   "kata_build_contract": {
     "guest_artifact_variant": "ubuntu24.04",
     "input_files": {
+      "src/runtime-rs/crates/runtimes/common/src/types/trans_from_shim.rs": "7337e1d98110b6670f1a8a7615f6313df92a7b461ca87b50609deaa5c438c783",
+      "tools/osbuilder/rootfs-builder/rootfs.sh": "78931320f2fd49918aa0dbb3b7ad744dd0b9c935688222b9ffe7178671f3f32b",
       "tools/osbuilder/rootfs-builder/ubuntu/config.sh": "0f40cd9ee3b6bcf4b456c2bd252df54891e96cee81b9b2066948f2fddfd783ea",
       "tools/packaging/kata-deploy/local-build/Makefile": "076ac56cbbf96b21b2bb1bf9ac7ebd37b14ed42e1fd9a82784687ca10b7cc39c",
       "tools/packaging/kata-deploy/local-build/kata-deploy-binaries.sh": "b4656af57f4e323a262c8a5a427578b2713940cb6594c16bbd19ed774c9df24e",

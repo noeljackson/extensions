@@ -34,6 +34,10 @@ does not consult mutable operating-system repositories.
 - export the accepted Kata Talos extension base through BuildKit without
   container-runtime pseudo-files, require exactly `manifest.yaml` plus
   `rootfs/`, and overlay the exact confidential payload inside that `rootfs/`;
+- require runtime-rs to render OCI DNS fields as resolver directives and prove
+  the built confidential guest starts with an empty `/etc/resolv.conf`, so the
+  sandbox DNS supplied at launch is authoritative rather than appended to a
+  build-host resolver;
 - install the commodity Cloud Hypervisor config and shim from the same pinned
   runtime-rs archive, then parse the final OCI config and reject legacy
   Go-runtime fields before publication;

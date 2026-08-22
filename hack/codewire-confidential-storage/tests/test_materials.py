@@ -37,8 +37,8 @@ class MaterialTests(unittest.TestCase):
                 "8468a2595cf7522e769ed33f62fb27e266137108",
             ),
             "kata_containers": (
-                "e7438835dd7c0af2befb441e50fd2859751f0c2e",
-                "0f6a98463e63743f669ea986f01eed92155a1703",
+                "8fb41f366ceb83b173a2485c05bf2b2176a251ee",
+                "481f715a24ddbee81e51903cf3977d90983d1910",
             ),
             "longhorn_manager": (
                 "4871f7092d048bdae99880006cd6add84f896f6a",
@@ -149,6 +149,13 @@ class MaterialTests(unittest.TestCase):
                 "tools/osbuilder/rootfs-builder/ubuntu/config.sh": (
                     'PACKAGES="base"\nPACKAGES+=" cryptsetup-bin e2fsprogs"\n'
                 ),
+                "tools/osbuilder/rootfs-builder/rootfs.sh": (
+                    'dns_file="${ROOTFS_DIR}/etc/resolv.conf"\n'
+                    ': > "${dns_file}"\n'
+                ),
+                "src/runtime-rs/crates/runtimes/common/src/types/trans_from_shim.rs": (
+                    "// sandbox DNS formatter fixture\n"
+                ),
                 "tools/packaging/kata-deploy/local-build/Makefile": "all:\n\ttrue\n",
                 "tools/packaging/kata-deploy/local-build/kata-deploy-binaries.sh": (
                     'digest="$(resolve_oci_artifact_manifest '
@@ -201,6 +208,32 @@ class MaterialTests(unittest.TestCase):
                 (output / "tools/osbuilder/rootfs-builder/ubuntu/config.sh").read_text(
                     encoding="utf-8"
                 ),
+            )
+            rootfs_builder = output / "tools/osbuilder/rootfs-builder/rootfs.sh"
+            rootfs_builder.write_text(
+                'dns_file="${ROOTFS_DIR}/etc/resolv.conf"\n'
+                'touch "${dns_file}"\n',
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(
+                materials.MaterialError,
+                "does not clear the guest resolver",
+            ):
+                materials.verify_prepared_kata(lock, output)
+            rootfs_builder.write_text(
+                'dns_file="${ROOTFS_DIR}/etc/resolv.conf"\n'
+                ': > "${dns_file}"\n'
+                'touch "${dns_file}"\n',
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(
+                materials.MaterialError,
+                "retains the build-host guest resolver",
+            ):
+                materials.verify_prepared_kata(lock, output)
+            rootfs_builder.write_text(
+                files["tools/osbuilder/rootfs-builder/rootfs.sh"],
+                encoding="utf-8",
             )
             packaging = (
                 output
@@ -341,7 +374,7 @@ class MaterialTests(unittest.TestCase):
                 )
                 text = (first / name).read_text(encoding="utf-8")
                 self.assertNotRegex(text.lower(), r"password|private_key|admin_token")
-                self.assertIn("e7438835dd7c0af2befb441e50fd2859751f0c2e", text)
+                self.assertIn("8fb41f366ceb83b173a2485c05bf2b2176a251ee", text)
 
     def test_oci_subject_uses_platform_manifest_and_checks_attestations(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
