@@ -40,13 +40,13 @@
     },
     "longhorn_manager": {
       "repository": "https://github.com/noeljackson/longhorn-manager",
-      "revision": "1cfcebd4ac6f7fc8c9b29158e126c36872eb4950",
-      "tree": "bb48a40cc04bdffee4f68927ad2134ca71e36b4d",
-      "source_date_epoch": 1786729805,
+      "revision": "4871f7092d048bdae99880006cd6add84f896f6a",
+      "tree": "5010190ec59786c01a3b27431805018a09aa3be9",
+      "source_date_epoch": 1787082058,
       "archive": {
-        "url": "https://codeload.github.com/noeljackson/longhorn-manager/tar.gz/1cfcebd4ac6f7fc8c9b29158e126c36872eb4950",
-        "sha256": "f70d5b4a0c8cb28b566caae4fba26d67ebcc0c8f5aaced3de5b5d60a0aa4758b",
-        "sha512": "ffacf733e13731c0e1603d3d053de4eb7d6c7757e23ad699a1d5afb1e19f2031ad29633c94def73a10966310174ecceada166769b5f0189fc455c006682a2808"
+        "url": "https://codeload.github.com/noeljackson/longhorn-manager/tar.gz/4871f7092d048bdae99880006cd6add84f896f6a",
+        "sha256": "e50ccd9d82be1244c9e3d0ea8b792a34b2e9cd904bcf3e33e417c7d9ddeec66f",
+        "sha512": "1a8120c768988bfc6475191b3c76e7626b5881b55b8ad1fe84e77efcf2ef2dde701c9056cc1b50bcfa62d567d82da9aa310a50809eddd1f5788ea4c0911a0b19"
       }
     },
     "trustee": {
