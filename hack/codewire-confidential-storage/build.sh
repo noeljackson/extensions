@@ -3,6 +3,7 @@
 set -euo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+default_scratch_root="${script_dir}/_out/scratch"
 lock_file="${script_dir}/sources.lock.json"
 materials_tool="${script_dir}/materials.py"
 source_names=(extensions guest_components kata_containers longhorn_manager trustee)
@@ -81,7 +82,7 @@ lock_sha256() {
 
 remove_tree() {
   local task_tree=$1
-  local scratch_root=${CODEWIRE_CONFIDENTIAL_STORAGE_SCRATCH_ROOT:-/tmp}
+  local scratch_root=${CODEWIRE_CONFIDENTIAL_STORAGE_SCRATCH_ROOT:-$default_scratch_root}
   [[ -n "$task_tree" && -d "$task_tree" && "$scratch_root" == /* ]] || return 0
   scratch_root="$(cd "$scratch_root" && pwd -P)"
   [[ "$scratch_root" != / ]] || die "scratch root cannot be /"
@@ -106,11 +107,20 @@ remove_tree() {
 }
 
 new_work_dir() {
-  local scratch_root=${CODEWIRE_CONFIDENTIAL_STORAGE_SCRATCH_ROOT:-/tmp}
+  local scratch_root=${CODEWIRE_CONFIDENTIAL_STORAGE_SCRATCH_ROOT:-$default_scratch_root}
   [[ "$scratch_root" == /* ]] || die "scratch root must be absolute"
   mkdir -p "$scratch_root"
   scratch_root="$(cd "$scratch_root" && pwd -P)"
   [[ "$scratch_root" != / ]] || die "scratch root cannot be /"
+  local exec_probe
+  exec_probe="$(mktemp "${scratch_root}/.codewire-exec-probe.XXXXXX")"
+  printf '#!/bin/sh\nexit 0\n' >"$exec_probe"
+  chmod 0700 "$exec_probe"
+  if ! "$exec_probe"; then
+    find "$exec_probe" -delete
+    die "scratch root does not permit executing build helpers; set CODEWIRE_CONFIDENTIAL_STORAGE_SCRATCH_ROOT to an executable dedicated directory"
+  fi
+  find "$exec_probe" -delete
   mktemp -d "${scratch_root}/codewire-confidential-storage.XXXXXX"
 }
 

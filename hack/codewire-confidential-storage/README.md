@@ -83,12 +83,13 @@ The expensive amd64 recipe is deliberately separate from publication:
   longhorn-image _out/confidential-storage/longhorn-manager
 ```
 
-Set `CODEWIRE_CONFIDENTIAL_STORAGE_SCRATCH_ROOT` to an absolute, dedicated
-directory when `/tmp` is too small for the Kata source and build outputs. The
-recipe only removes its own `codewire-confidential-storage.*` children directly
-beneath that root. The archive verifier checks executable mode bits directly,
-so a `noexec` scratch mount does not make a correctly packaged executable look
-invalid.
+The default scratch root is the ignored
+`hack/codewire-confidential-storage/_out/scratch` directory. Set
+`CODEWIRE_CONFIDENTIAL_STORAGE_SCRATCH_ROOT` to another absolute, dedicated
+directory when needed. The root must permit execution because the Kata build
+runs its checked-out helper scripts there; the wrapper probes that property and
+fails before compilation with a direct diagnostic. The recipe only removes its
+own `codewire-confidential-storage.*` children directly beneath that root.
 
 The outputs are local OCI archives plus non-secret material receipts. Publishing
 them is OP-1 and requires its separate action-scoped authority. Never replace a
