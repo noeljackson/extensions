@@ -89,7 +89,10 @@ The default scratch root is the ignored
 directory when needed. The root must permit execution because the Kata build
 runs its checked-out helper scripts there; the wrapper probes that property and
 fails before compilation with a direct diagnostic. The recipe only removes its
-own `codewire-confidential-storage.*` children directly beneath that root.
+own `codewire-confidential-storage.*` children directly beneath that root. The
+builder normalizes public source checkout modes independently of the invoking
+shell umask and rejects a libseccomp installer that the unprivileged builder UID
+cannot execute.
 
 The outputs are local OCI archives plus non-secret material receipts. Publishing
 them is OP-1 and requires its separate action-scoped authority. Never replace a
