@@ -502,12 +502,13 @@ class MaterialTests(unittest.TestCase):
             ] = b'''\
 [hypervisor.qemu]
 image = "/usr/local/share/kata-containers/kata-containers-confidential.img"
+kernel_verity_params = "root_hash=cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc,salt=dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd,data_blocks=2,data_block_size=4096,hash_block_size=4096"
 confidential_guest = true
 shared_fs = "none"
 [[hypervisor.qemu.guest_extension_images]]
 name = "coco"
 path = "/usr/local/share/kata-containers/not-the-coco-image.img"
-verity_params = ""
+verity_params = "root_hash=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,salt=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb,data_blocks=1,data_block_size=4096,hash_block_size=4096"
 '''
             wrong_path, _ = self._write_oci_archive(
                 root / "wrong-path",
@@ -541,6 +542,54 @@ verity_params = ""
                 materials.verify_oci_image(
                     LOCK_PATH, self.lock, "kata-extension", shared_root
                 )
+
+    def test_kata_extension_binds_verity_params_to_root_hashes(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            coco_params = b'verity_params = "root_hash=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,salt=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb,data_blocks=1,data_block_size=4096,hash_block_size=4096"'
+            confidential_params = b'kernel_verity_params = "root_hash=cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc,salt=dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd,data_blocks=2,data_block_size=4096,hash_block_size=4096"'
+            for name, needle, replacement, expected in (
+                (
+                    "coco-empty",
+                    coco_params,
+                    b'verity_params = ""',
+                    "CoCo verity params do not match its root hash",
+                ),
+                (
+                    "coco-mismatch",
+                    coco_params,
+                    b"verity_params = \"root_hash=cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc,salt=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb,data_blocks=1,data_block_size=4096,hash_block_size=4096\"",
+                    "CoCo verity params do not match its root hash",
+                ),
+                (
+                    "confidential-empty",
+                    confidential_params,
+                    b'kernel_verity_params = ""',
+                    "confidential root verity params do not match its root hash",
+                ),
+                (
+                    "confidential-mismatch",
+                    confidential_params,
+                    b"kernel_verity_params = \"root_hash=eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee,salt=dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd,data_blocks=2,data_block_size=4096,hash_block_size=4096\"",
+                    "confidential root verity params do not match its root hash",
+                ),
+            ):
+                with self.subTest(name=name):
+                    entries = self._kata_extension_entries()
+                    config_name = (
+                        "rootfs/usr/local/share/kata-containers/"
+                        "configuration-qemu-snp.toml"
+                    )
+                    entries[config_name] = entries[config_name].replace(needle, replacement)
+                    archive, _ = self._write_oci_archive(
+                        root / name,
+                        component="kata-extension",
+                        layer_entries=entries,
+                    )
+                    with self.assertRaisesRegex(materials.MaterialError, expected):
+                        materials.verify_oci_image(
+                            LOCK_PATH, self.lock, "kata-extension", archive
+                        )
 
     def test_kata_extension_rejects_legacy_runtime_config(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -615,6 +664,22 @@ agent_name = "kata"
         self.assertIn("rootfs-image-coco-extension-tarball", recipe)
         self.assertIn("kata-static-rootfs-image-coco-extension.tar.zst", recipe)
         self.assertIn("kata-containers-coco-extension.img", recipe)
+        self.assertIn("root_hash_coco-extension.txt", recipe)
+        self.assertIn('cmp -s "$source"', recipe)
+        self.assertIn("parsed kernel_verity_params does not match", recipe)
+        self.assertNotIn(
+            'find "$work_dir/context/extension" -exec touch',
+            recipe,
+        )
+        self.assertIn("--no-cache", recipe)
+        parallel_targets = recipe.split("kata_parallel_targets=(", 1)[1].split(")", 1)[0]
+        post_image_targets = recipe.split("kata_post_image_targets=(", 1)[1].split(")", 1)[0]
+        self.assertNotIn("shim-v2-rust-tarball", parallel_targets)
+        self.assertIn("shim-v2-rust-tarball", post_image_targets)
+        self.assertLess(
+            recipe.index('BASE_TARBALLS="$parallel_targets"'),
+            recipe.index('BASE_TARBALLS="$post_image_targets"'),
+        )
         self.assertIn("has_executable_mode", recipe)
         self.assertNotIn('[[ -x "$shim" ]]', recipe)
         self.assertNotIn('[[ -x "$kata_ctl" ]]', recipe)
@@ -849,18 +914,20 @@ agent_name = "kata"
             "rootfs/usr/local/share/kata-containers/configuration-qemu-snp.toml": b'''\
 [hypervisor.qemu]
 image = "/usr/local/share/kata-containers/kata-containers-confidential.img"
+kernel_verity_params = "root_hash=cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc,salt=dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd,data_blocks=2,data_block_size=4096,hash_block_size=4096"
 confidential_guest = true
 shared_fs = "none"
 [[hypervisor.qemu.guest_extension_images]]
 name = "coco"
 path = "/usr/local/share/kata-containers/kata-containers-coco-extension.img"
-verity_params = ""
+verity_params = "root_hash=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,salt=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb,data_blocks=1,data_block_size=4096,hash_block_size=4096"
 ''',
             "rootfs/usr/local/share/kata-containers/kata-containers.img": b"commodity-image",
             "rootfs/usr/local/share/kata-containers/kata-containers-confidential.img": b"image",
             "rootfs/usr/local/share/kata-containers/kata-containers-coco-extension.img": b"coco-image",
             "rootfs/usr/local/share/kata-containers/kata-containers-initrd-confidential.img": b"initrd",
-            "rootfs/usr/local/share/kata-containers/root_hash_confidential.txt": b"hash\n",
+            "rootfs/usr/local/share/kata-containers/root_hash_coco-extension.txt": b"root_hash=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,salt=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb,data_blocks=1,data_block_size=4096,hash_block_size=4096\n",
+            "rootfs/usr/local/share/kata-containers/root_hash_confidential.txt": b"root_hash=cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc,salt=dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd,data_blocks=2,data_block_size=4096,hash_block_size=4096\n",
         }
 
     def _static_amd64_elf(self) -> bytes:

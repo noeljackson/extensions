@@ -1,0 +1,179 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+die() {
+  printf 'error: %s\n' "$*" >&2
+  exit 1
+}
+
+require_command() {
+  command -v "$1" >/dev/null 2>&1 || die "required command is unavailable: $1"
+}
+
+[[ $# -eq 1 ]] || die "usage: $0 KATA_EXTENSION_OCI_ARCHIVE"
+
+for command in jq python3 qemu-system-x86_64 sed skopeo tar timeout; do
+  require_command "$command"
+done
+
+archive=$1
+[[ -f "$archive" ]] || die "Kata extension OCI archive does not exist: $archive"
+archive="$(realpath "$archive")"
+
+scratch_root=${CODEWIRE_CONFIDENTIAL_STORAGE_SCRATCH_ROOT:-/tmp}
+[[ "$scratch_root" == /* ]] || die "scratch root must be absolute"
+mkdir -p "$scratch_root"
+scratch_root="$(cd "$scratch_root" && pwd -P)"
+[[ "$scratch_root" != / ]] || die "scratch root cannot be /"
+
+horizon=${CODEWIRE_KATA_TCG_BOOT_HORIZON_SECONDS:-75}
+[[ "$horizon" =~ ^[0-9]+$ && "$horizon" -ge 30 && "$horizon" -le 300 ]] \
+  || die "TCG boot horizon must be an integer from 30 through 300 seconds"
+
+work_dir="$(mktemp -d "${scratch_root}/codewire-kata-tcg-smoke.XXXXXX")"
+chmod 700 "$work_dir"
+cleanup() {
+  local status=$?
+  if [[ $status -eq 0 ]]; then
+    find "$work_dir" -depth -delete
+  else
+    printf 'diagnostic directory retained: %s\n' "$work_dir" >&2
+  fi
+  return "$status"
+}
+trap cleanup EXIT
+
+skopeo copy --quiet "oci-archive:${archive}" "dir:${work_dir}/image"
+layer_digest="$({
+  jq -er '
+    if (.layers | length) != 1 then error("expected exactly one image layer")
+    elif .layers[0].mediaType != "application/vnd.oci.image.layer.v1.tar+gzip"
+    then error("expected one gzip-compressed OCI image layer")
+    else .layers[0].digest
+    end
+  ' "$work_dir/image/manifest.json"
+})"
+[[ "$layer_digest" =~ ^sha256:[0-9a-f]{64}$ ]] || die "OCI layer digest is invalid"
+layer="$work_dir/image/${layer_digest#sha256:}"
+[[ -f "$layer" ]] || die "OCI layer blob is missing"
+
+payload=rootfs/usr/local/share/kata-containers
+tar -xzf "$layer" -C "$work_dir" \
+  "$payload/configuration-qemu-snp.toml" \
+  "$payload/kata-containers-confidential.img" \
+  "$payload/kata-containers-coco-extension.img" \
+  "$payload/root_hash_confidential.txt" \
+  "$payload/root_hash_coco-extension.txt" \
+  "$payload/vmlinuz.container"
+chmod -R go-rwx "$work_dir"
+payload="$work_dir/$payload"
+
+mapfile -t boot_values < <(
+  python3 - \
+    "$payload/configuration-qemu-snp.toml" \
+    "$payload/root_hash_confidential.txt" \
+    "$payload/root_hash_coco-extension.txt" <<'PY'
+import pathlib
+import re
+import sys
+import tomllib
+
+config_path, root_path, coco_path = map(pathlib.Path, sys.argv[1:])
+config = tomllib.loads(config_path.read_text())
+qemu = config.get("hypervisor", {}).get("qemu", {})
+pattern = re.compile(
+    r"root_hash=([0-9a-f]{64}),salt=([0-9a-f]{64}),"
+    r"data_blocks=([1-9][0-9]*),data_block_size=([1-9][0-9]*),"
+    r"hash_block_size=([1-9][0-9]*)"
+)
+
+def read_record(path: pathlib.Path, description: str) -> tuple[str, re.Match[str]]:
+    lines = [line.strip() for line in path.read_text().splitlines() if line.strip()]
+    if len(lines) != 1:
+        raise SystemExit(f"{description} measurement must contain one non-empty line")
+    match = pattern.fullmatch(lines[0])
+    if match is None:
+        raise SystemExit(f"{description} measurement has an invalid format")
+    return lines[0], match
+
+root_record, root_match = read_record(root_path, "confidential root")
+coco_record, _ = read_record(coco_path, "CoCo extension")
+if qemu.get("kernel_verity_params") != root_record:
+    raise SystemExit("confidential root measurement does not match the QEMU config")
+coco = [
+    image
+    for image in qemu.get("guest_extension_images", [])
+    if image.get("name") == "coco"
+]
+if len(coco) != 1 or coco[0].get("verity_params") != coco_record:
+    raise SystemExit("CoCo extension measurement does not match the QEMU config")
+if coco[0].get("path") != (
+    "/usr/local/share/kata-containers/kata-containers-coco-extension.img"
+):
+    raise SystemExit("CoCo extension path is not canonical")
+
+root_hash, salt, data_blocks, data_block_size, hash_block_size = root_match.groups()
+data_blocks_value = int(data_blocks)
+data_block_size_value = int(data_block_size)
+if data_block_size_value % 512:
+    raise SystemExit("confidential root data block size is not sector-aligned")
+sectors = data_blocks_value * data_block_size_value // 512
+print(root_hash)
+print(salt)
+print(data_blocks)
+print(data_block_size)
+print(hash_block_size)
+print(coco_record)
+print(sectors)
+PY
+)
+[[ ${#boot_values[@]} -eq 7 ]] || die "failed to reduce exact boot measurements"
+root_hash=${boot_values[0]}
+salt=${boot_values[1]}
+data_blocks=${boot_values[2]}
+data_block_size=${boot_values[3]}
+hash_block_size=${boot_values[4]}
+coco_params=${boot_values[5]}
+sectors=${boot_values[6]}
+
+raw_log="$work_dir/tcg-boot.log"
+clean_log="$work_dir/tcg-boot.clean.log"
+qemu_status=0
+timeout --signal=TERM "${horizon}s" qemu-system-x86_64 \
+  -machine q35,accel=tcg \
+  -cpu max \
+  -m 2048 \
+  -smp 2 \
+  -nodefaults \
+  -no-reboot \
+  -display none \
+  -monitor none \
+  -serial stdio \
+  -kernel "$payload/vmlinuz.container" \
+  -append "reboot=k panic=1 systemd.unit=kata-containers.target systemd.mask=systemd-networkd.service systemd.mask=systemd-networkd.socket dm-mod.create=\"dm-verity,,,ro,0 ${sectors} verity 1 /dev/vda1 /dev/vda2 ${data_block_size} ${hash_block_size} ${data_blocks} 0 sha256 ${root_hash} ${salt}\" root=/dev/dm-0 rootflags=data=ordered,errors=remount-ro ro rootfstype=ext4 cgroup_no_v1=all systemd.unified_cgroup_hierarchy=1 selinux=1 kata.extension.coco.verity_params=${coco_params} console=ttyS0 systemd.log_target=console" \
+  -drive "if=none,file=$payload/kata-containers-confidential.img,format=raw,id=root" \
+  -device virtio-blk-pci,drive=root,serial=rootfs \
+  -drive "if=none,file=$payload/kata-containers-coco-extension.img,format=raw,id=coco" \
+  -device virtio-blk-pci,drive=coco,serial=extension-coco \
+  >"$raw_log" 2>&1 || qemu_status=$?
+
+[[ $qemu_status -eq 124 ]] \
+  || die "guest exited before the bounded TCG observation horizon (status ${qemu_status})"
+sed -r 's/\x1B\[[0-9;?]*[ -\/]*[@-~]//g; s/\r$//' "$raw_log" >"$clean_log"
+
+required_markers=(
+  'dm-0 (dm-verity) is ready'
+  'Finished kata-extension-mount@coco'
+  'Started kata-agent.service'
+  'Reached target kata-containers.target'
+  'ttRPC server started'
+)
+for marker in "${required_markers[@]}"; do
+  grep -Fq "$marker" "$clean_log" || die "guest boot lacks required marker: $marker"
+done
+if grep -Fq 'Failed to start kata-extension-mount@coco' "$clean_log"; then
+  die "CoCo extension mount failed"
+fi
+
+printf 'Kata TCG boot smoke passed: dm-verity root, CoCo extension, and Kata Agent ready\n'
+printf 'note: this proves guest boot integrity, not SEV-SNP attestation\n'

@@ -13,7 +13,6 @@ kata_parallel_targets=(
   kernel-tarball
   ovmf-sev-tarball
   qemu-snp-experimental-tarball
-  shim-v2-rust-tarball
   kata-ctl-tarball
   serial-targets
 )
@@ -21,6 +20,9 @@ kata_serial_targets=(
   rootfs-image-confidential-tarball
   rootfs-image-coco-extension-tarball
   rootfs-initrd-confidential-tarball
+)
+kata_post_image_targets=(
+  shim-v2-rust-tarball
 )
 kata_final_inputs=(
   kata-static-kernel.tar.zst
@@ -166,10 +168,11 @@ verify_kata_static() (
   require_command debugfs
   require_command dd
   require_command jq
+  require_command python3
   require_command readelf
   require_command sfdisk
 
-  local audit_dir image coco_extension_image rootfs shim kata_ctl runtime_config commodity_runtime_config cdh_output partition_json sector_size partition_start partition_size
+  local audit_dir image coco_extension_image coco_root_hash rootfs shim kata_ctl runtime_config commodity_runtime_config cdh_output partition_json sector_size partition_start partition_size
   local program_headers dynamic_tags
   audit_dir="$(new_work_dir)"
   trap 'remove_tree "${audit_dir:-}"' EXIT
@@ -204,6 +207,23 @@ verify_kata_static() (
     || die "runtime-rs QEMU-SNP configuration does not preserve shared_fs=none"
   grep -Fqx 'path = "/opt/kata/share/kata-containers/kata-containers-coco-extension.img"' "$runtime_config" \
     || die "runtime-rs QEMU-SNP configuration does not consume the built CoCo guest extension image"
+  coco_root_hash="$(unique_file "$audit_dir" '*/opt/kata/share/kata-containers/root_hash_coco-extension.txt')"
+  python3 - "$runtime_config" "$coco_root_hash" <<'PY' || \
+    die "runtime-rs QEMU-SNP configuration is not bound to the built CoCo extension measurement"
+import pathlib
+import sys
+import tomllib
+
+config_path, root_hash_path = map(pathlib.Path, sys.argv[1:])
+root_hash_lines = [line.strip() for line in root_hash_path.read_text().splitlines() if line.strip()]
+if len(root_hash_lines) != 1:
+    raise SystemExit("CoCo extension root hash must contain exactly one non-empty line")
+config = tomllib.loads(config_path.read_text())
+images = config.get("hypervisor", {}).get("qemu", {}).get("guest_extension_images", [])
+coco = [image for image in images if image.get("name") == "coco"]
+if len(coco) != 1 or coco[0].get("verity_params") != root_hash_lines[0]:
+    raise SystemExit("CoCo extension verity params do not match its root hash")
+PY
   commodity_runtime_config="$(unique_file "$audit_dir" '*/opt/kata/share/defaults/kata-containers/runtime-rs/configuration-clh-runtime-rs.toml')"
   grep -Fqx '[hypervisor.clh]' "$commodity_runtime_config" \
     || die "runtime-rs Cloud Hypervisor configuration lacks its hypervisor table"
@@ -244,7 +264,7 @@ verify_kata_static() (
 overlay_confidential_payload() {
   local static_root=$1
   local rootfs=$2
-  local source destination
+  local source destination confidential_verity_params
 
   source="$static_root/opt/kata/runtime-rs/bin/containerd-shim-kata-v2"
   has_executable_mode "$source" || die "exact Kata runtime-rs shim is missing or has no executable mode bit"
@@ -259,9 +279,12 @@ overlay_confidential_payload() {
     kata-containers-confidential.img \
     kata-containers-coco-extension.img \
     kata-containers-initrd-confidential.img \
-    root_hash_confidential.txt; do
+    root_hash_confidential.txt \
+    root_hash_coco-extension.txt; do
     source="$(unique_file "$static_root" "*/opt/kata/share/kata-containers/${destination}")"
     install -D -m 0644 "$source" "$rootfs/usr/local/share/kata-containers/${destination}"
+    cmp -s "$source" "$rootfs/usr/local/share/kata-containers/${destination}" \
+      || die "final Kata payload differs after copying ${destination}"
   done
 
   source="$(unique_file "$static_root" '*/opt/kata/share/defaults/kata-containers/runtime-rs/configuration-clh-runtime-rs.toml')"
@@ -290,6 +313,30 @@ overlay_confidential_payload() {
     -e 's#shared_fs = "virtio-fs"#shared_fs = "none"#' \
     -e 's#create_container_timeout = [0-9][0-9]*#create_container_timeout = 180#' \
     "$rootfs/usr/local/share/kata-containers/configuration-qemu-snp.toml"
+  IFS= read -r confidential_verity_params < \
+    "$rootfs/usr/local/share/kata-containers/root_hash_confidential.txt"
+  [[ -n "$confidential_verity_params" ]] || \
+    die "confidential root image has no verity params"
+  python3 - \
+    "$rootfs/usr/local/share/kata-containers/configuration-qemu-snp.toml" \
+    "$confidential_verity_params" <<'PY' || \
+    die "failed to bind the QEMU-SNP configuration to the confidential root measurement"
+import pathlib
+import sys
+import tomllib
+
+config_path = pathlib.Path(sys.argv[1])
+verity_params = sys.argv[2]
+lines = config_path.read_text().splitlines()
+matches = [index for index, line in enumerate(lines) if line.startswith("kernel_verity_params = ")]
+if len(matches) != 1:
+    raise SystemExit("expected exactly one kernel_verity_params assignment")
+lines[matches[0]] = f'kernel_verity_params = "{verity_params}"'
+config_path.write_text("\n".join(lines) + "\n")
+config = tomllib.loads(config_path.read_text())
+if config.get("hypervisor", {}).get("qemu", {}).get("kernel_verity_params") != verity_params:
+    raise SystemExit("parsed kernel_verity_params does not match the confidential root hash")
+PY
   grep -Eq '^enable_annotations = .*"cc_init_data"' "$rootfs/usr/local/share/kata-containers/configuration-qemu-snp.toml" \
     || sed -i '/^enable_annotations = / s/]$/, "cc_init_data"]/' \
       "$rootfs/usr/local/share/kata-containers/configuration-qemu-snp.toml"
@@ -307,6 +354,9 @@ overlay_confidential_payload() {
   grep -Fqx 'image = "/usr/local/share/kata-containers/kata-containers-confidential.img"' \
     "$rootfs/usr/local/share/kata-containers/configuration-qemu-snp.toml" \
     || die "QEMU-SNP configuration does not use its dedicated confidential root image"
+  grep -Fqx "kernel_verity_params = \"$confidential_verity_params\"" \
+    "$rootfs/usr/local/share/kata-containers/configuration-qemu-snp.toml" \
+    || die "QEMU-SNP configuration does not use its confidential root measurement"
   grep -Fqx 'path = "/usr/local/share/kata-containers/kata-containers-coco-extension.img"' \
     "$rootfs/usr/local/share/kata-containers/configuration-qemu-snp.toml" \
     || die "QEMU-SNP configuration does not consume the overlaid CoCo guest extension image"
@@ -373,12 +423,18 @@ case "$command" in
     local_build="$work_dir/kata-prepared/tools/packaging/kata-deploy/local-build"
     parallel_targets="${kata_parallel_targets[*]}"
     serial_targets="${kata_serial_targets[*]}"
+    post_image_targets="${kata_post_image_targets[*]}"
     final_inputs="${kata_final_inputs[*]}"
     STATIC_RUNTIME=yes USE_CACHE=no PUSH_TO_REGISTRY=no RELEASE=yes \
       make -C "$local_build" -f "$local_build/Makefile" all \
       -j "$(nproc)" --output-sync=target V= \
       BASE_TARBALLS="$parallel_targets" \
       BASE_SERIAL_TARBALLS="$serial_targets" \
+      DEPS=
+    STATIC_RUNTIME=yes USE_CACHE=no PUSH_TO_REGISTRY=no RELEASE=yes \
+      make -C "$local_build" -f "$local_build/Makefile" all \
+      -j "$(nproc)" --output-sync=target V= \
+      BASE_TARBALLS="$post_image_targets" \
       DEPS=
     RELEASE=yes make -C "$local_build" -f "$local_build/Makefile" merge-builds \
       FINAL_TARBALL_INPUTS="$final_inputs" \
@@ -430,9 +486,11 @@ case "$command" in
       --output-dir "$work_dir/context/extension/rootfs/usr/local/share/codewire/confidential-storage"
     python3 "$materials_tool" --lock "$lock_file" verify-extension-tree \
       --root "$work_dir/context/extension"
-    epoch="$(lock_value '.source_date_epoch')"
-    find "$work_dir/context/extension" -exec touch -h --date="@${epoch}" {} +
+    # Let BuildKit observe real source mtimes so equal-sized measured images
+    # cannot reuse stale local-context content. The OCI exporter rewrites every
+    # output timestamp to SOURCE_DATE_EPOCH after content ingestion.
     docker buildx build \
+      --no-cache \
       --file "$script_dir/extension.Dockerfile" \
       --platform linux/amd64 \
       --provenance=mode=max \

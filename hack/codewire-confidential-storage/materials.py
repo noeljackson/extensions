@@ -938,6 +938,7 @@ def verify_kata_extension_layer(data: bytes) -> None:
         "rootfs/usr/local/share/kata-containers/kata-containers-confidential.img",
         "rootfs/usr/local/share/kata-containers/kata-containers-coco-extension.img",
         "rootfs/usr/local/share/kata-containers/kata-containers-initrd-confidential.img",
+        "rootfs/usr/local/share/kata-containers/root_hash_coco-extension.txt",
         "rootfs/usr/local/share/kata-containers/root_hash_confidential.txt",
     }
     missing_payload = sorted(required - set(normalized))
@@ -1057,6 +1058,50 @@ def verify_kata_extension_layer(data: bytes) -> None:
         raise MaterialError("Kata extension QEMU-SNP config is not confidential")
     if qemu_hypervisor.get("shared_fs") != "none":
         raise MaterialError("Kata extension QEMU-SNP config does not use shared_fs=none")
+
+    def read_verity_record(member_name: str, description: str) -> str:
+        member = by_name[member_name]
+        if not member.isfile():
+            raise MaterialError(f"Kata extension {description} root hash is not a file")
+        try:
+            with tarfile.open(fileobj=io.BytesIO(data), mode="r:*") as layer:
+                stream = layer.extractfile(member.name)
+                if stream is None:
+                    raise MaterialError(
+                        f"Kata extension {description} root hash is unreadable"
+                    )
+                lines = [
+                    line.strip()
+                    for line in stream.read().decode("utf-8").splitlines()
+                    if line.strip()
+                ]
+        except (OSError, UnicodeDecodeError, tarfile.TarError) as error:
+            raise MaterialError(
+                f"Kata extension {description} root hash is unreadable: {error}"
+            ) from error
+        if len(lines) != 1 or re.fullmatch(
+            r"root_hash=[0-9a-f]{64},salt=[0-9a-f]{64},data_blocks=[1-9][0-9]*,"
+            r"data_block_size=[1-9][0-9]*,hash_block_size=[1-9][0-9]*",
+            lines[0],
+        ) is None:
+            raise MaterialError(
+                f"Kata extension {description} root hash has an invalid format"
+            )
+        return lines[0]
+
+    confidential_root_hash = read_verity_record(
+        "rootfs/usr/local/share/kata-containers/root_hash_confidential.txt",
+        "confidential",
+    )
+    if qemu_hypervisor.get("kernel_verity_params") != confidential_root_hash:
+        raise MaterialError(
+            "Kata extension confidential root verity params do not match its root hash"
+        )
+    coco_root_hash = read_verity_record(
+        "rootfs/usr/local/share/kata-containers/root_hash_coco-extension.txt",
+        "CoCo",
+    )
+
     guest_images = qemu_hypervisor.get("guest_extension_images")
     if not isinstance(guest_images, list) or not guest_images:
         raise MaterialError("Kata extension QEMU-SNP config has no guest extension images")
@@ -1086,6 +1131,10 @@ def verify_kata_extension_layer(data: bytes) -> None:
                 f"Kata extension lacks non-empty configured guest image {path}"
             )
         if name == "coco" and path == expected_coco_path:
+            if image.get("verity_params") != coco_root_hash:
+                raise MaterialError(
+                    "Kata extension CoCo verity params do not match its root hash"
+                )
             found_coco = True
     if not found_coco:
         raise MaterialError(
