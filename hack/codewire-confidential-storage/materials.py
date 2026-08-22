@@ -934,6 +934,7 @@ def verify_kata_extension_layer(data: bytes) -> None:
         "rootfs/usr/local/share/codewire/confidential-storage/provenance.in-toto.json",
         "rootfs/usr/local/share/kata-containers/configuration.toml",
         "rootfs/usr/local/share/kata-containers/configuration-qemu-snp.toml",
+        "rootfs/usr/local/share/kata-containers/kata-containers.img",
         "rootfs/usr/local/share/kata-containers/kata-containers-confidential.img",
         "rootfs/usr/local/share/kata-containers/kata-containers-coco-extension.img",
         "rootfs/usr/local/share/kata-containers/kata-containers-initrd-confidential.img",
@@ -981,6 +982,10 @@ def verify_kata_extension_layer(data: bytes) -> None:
         "valid_hypervisor_paths"
     ) != ["/usr/local/bin/cloud-hypervisor"]:
         raise MaterialError("Kata extension commodity config has invalid CLH paths")
+    if clh.get("image") != "/usr/local/share/kata-containers/kata-containers.img":
+        raise MaterialError(
+            "Kata extension commodity config does not use its dedicated root image"
+        )
     annotations = clh.get("enable_annotations")
     if not isinstance(annotations, list) or not {
         "cc_init_data",
@@ -1042,6 +1047,12 @@ def verify_kata_extension_layer(data: bytes) -> None:
     )
     if not isinstance(qemu_hypervisor, dict):
         raise MaterialError("Kata extension QEMU-SNP config lacks hypervisor.qemu")
+    if qemu_hypervisor.get("image") != (
+        "/usr/local/share/kata-containers/kata-containers-confidential.img"
+    ):
+        raise MaterialError(
+            "Kata extension QEMU-SNP config does not use its dedicated confidential root image"
+        )
     if qemu_hypervisor.get("confidential_guest") is not True:
         raise MaterialError("Kata extension QEMU-SNP config is not confidential")
     if qemu_hypervisor.get("shared_fs") != "none":
