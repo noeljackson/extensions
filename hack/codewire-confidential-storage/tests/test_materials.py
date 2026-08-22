@@ -497,6 +497,7 @@ class MaterialTests(unittest.TestCase):
                 "rootfs/usr/local/share/kata-containers/configuration-qemu-snp.toml"
             ] = b'''\
 [hypervisor.qemu]
+image = "/usr/local/share/kata-containers/kata-containers-confidential.img"
 confidential_guest = true
 shared_fs = "none"
 [[hypervisor.qemu.guest_extension_images]]
@@ -517,6 +518,26 @@ verity_params = ""
                     LOCK_PATH, self.lock, "kata-extension", wrong_path
                 )
 
+            shared_root_entries = self._kata_extension_entries()
+            shared_root_entries[
+                "rootfs/usr/local/share/kata-containers/configuration-qemu-snp.toml"
+            ] = shared_root_entries[
+                "rootfs/usr/local/share/kata-containers/configuration-qemu-snp.toml"
+            ].replace(
+                b"kata-containers-confidential.img", b"kata-containers.img"
+            )
+            shared_root, _ = self._write_oci_archive(
+                root / "shared-root",
+                component="kata-extension",
+                layer_entries=shared_root_entries,
+            )
+            with self.assertRaisesRegex(
+                materials.MaterialError, "dedicated confidential root image"
+            ):
+                materials.verify_oci_image(
+                    LOCK_PATH, self.lock, "kata-extension", shared_root
+                )
+
     def test_kata_extension_rejects_legacy_runtime_config(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -527,6 +548,7 @@ verity_params = ""
 [hypervisor.clh]
 path = "/usr/local/bin/cloud-hypervisor"
 valid_hypervisor_paths = ["/usr/local/bin/cloud-hypervisor"]
+image = "/usr/local/share/kata-containers/kata-containers.img"
 enable_annotations = ["kernel_params", "cc_init_data"]
 [agent.kata]
 dial_timeout = 45
@@ -812,6 +834,7 @@ agent_name = "kata"
 [hypervisor.clh]
 path = "/usr/local/bin/cloud-hypervisor"
 valid_hypervisor_paths = ["/usr/local/bin/cloud-hypervisor"]
+image = "/usr/local/share/kata-containers/kata-containers.img"
 enable_annotations = ["kernel_params", "cc_init_data"]
 [agent.kata]
 dial_timeout_ms = 10
@@ -821,6 +844,7 @@ agent_name = "kata"
 ''',
             "rootfs/usr/local/share/kata-containers/configuration-qemu-snp.toml": b'''\
 [hypervisor.qemu]
+image = "/usr/local/share/kata-containers/kata-containers-confidential.img"
 confidential_guest = true
 shared_fs = "none"
 [[hypervisor.qemu.guest_extension_images]]
@@ -828,6 +852,7 @@ name = "coco"
 path = "/usr/local/share/kata-containers/kata-containers-coco-extension.img"
 verity_params = ""
 ''',
+            "rootfs/usr/local/share/kata-containers/kata-containers.img": b"commodity-image",
             "rootfs/usr/local/share/kata-containers/kata-containers-confidential.img": b"image",
             "rootfs/usr/local/share/kata-containers/kata-containers-coco-extension.img": b"coco-image",
             "rootfs/usr/local/share/kata-containers/kata-containers-initrd-confidential.img": b"initrd",

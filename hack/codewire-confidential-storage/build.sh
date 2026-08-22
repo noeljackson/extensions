@@ -284,6 +284,7 @@ overlay_confidential_payload() {
   install -D -m 0644 "$source" "$rootfs/usr/local/share/kata-containers/configuration-qemu-snp.toml"
   sed -i \
     -e 's#/opt/kata#/usr/local#g' \
+    -e 's#^image = "/usr/local/share/kata-containers/kata-containers.img"$#image = "/usr/local/share/kata-containers/kata-containers-confidential.img"#' \
     -e 's#path = "/usr/local/bin/qemu-system-x86_64"#path = "/usr/local/bin/qemu-system-x86_64-snp-experimental"#' \
     -e 's#valid_hypervisor_paths = \["/usr/local/bin/qemu-system-x86_64"\]#valid_hypervisor_paths = ["/usr/local/bin/qemu-system-x86_64-snp-experimental"]#' \
     -e 's#shared_fs = "virtio-fs"#shared_fs = "none"#' \
@@ -303,6 +304,9 @@ overlay_confidential_payload() {
   fi
   grep -Eq '^shared_fs = "none"$' "$rootfs/usr/local/share/kata-containers/configuration-qemu-snp.toml" \
     || die "QEMU-SNP configuration does not preserve shared_fs=none"
+  grep -Fqx 'image = "/usr/local/share/kata-containers/kata-containers-confidential.img"' \
+    "$rootfs/usr/local/share/kata-containers/configuration-qemu-snp.toml" \
+    || die "QEMU-SNP configuration does not use its dedicated confidential root image"
   grep -Fqx 'path = "/usr/local/share/kata-containers/kata-containers-coco-extension.img"' \
     "$rootfs/usr/local/share/kata-containers/configuration-qemu-snp.toml" \
     || die "QEMU-SNP configuration does not consume the overlaid CoCo guest extension image"
