@@ -2,6 +2,12 @@
 
 set -euo pipefail
 
+# This builder consumes and emits public source and artifacts. Normalize source
+# checkout modes instead of inheriting a caller's private umask: several Kata
+# builder containers run as the invoking UID and execute root-owned COPY inputs.
+# mktemp still creates each scratch work directory as mode 0700.
+umask 022
+
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 default_scratch_root="${script_dir}/_out/scratch"
 lock_file="${script_dir}/sources.lock.json"

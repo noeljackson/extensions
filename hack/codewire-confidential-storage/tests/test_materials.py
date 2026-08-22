@@ -138,6 +138,7 @@ class MaterialTests(unittest.TestCase):
             source = root / "source"
             self._init_repo(source)
             files = {
+                "ci/install_libseccomp.sh": "#!/bin/sh\nexit 0\n",
                 "versions.yaml": (
                     "  coco-guest-components:\n"
                     '    description: "test"\n'
@@ -169,6 +170,7 @@ class MaterialTests(unittest.TestCase):
                 path = source / relative
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text(content, encoding="utf-8")
+            (source / "ci/install_libseccomp.sh").chmod(0o755)
             self._commit_all(source)
 
             lock = copy.deepcopy(self.lock)
@@ -235,6 +237,14 @@ class MaterialTests(unittest.TestCase):
                 files["tools/osbuilder/rootfs-builder/rootfs.sh"],
                 encoding="utf-8",
             )
+            libseccomp_installer = output / "ci/install_libseccomp.sh"
+            libseccomp_installer.chmod(0o700)
+            with self.assertRaisesRegex(
+                materials.MaterialError,
+                "executable by the builder UID",
+            ):
+                materials.verify_prepared_kata(lock, output)
+            libseccomp_installer.chmod(0o755)
             packaging = (
                 output
                 / "tools/packaging/kata-deploy/local-build/kata-deploy-binaries.sh"

@@ -11,6 +11,7 @@ import io
 import json
 import os
 import re
+import stat
 import struct
 import subprocess
 import sys
@@ -581,6 +582,12 @@ def verify_prepared_kata(lock: dict[str, Any], repo: Path) -> None:
     if 'touch "${dns_file}"' in rootfs_builder:
         raise MaterialError(
             "prepared Kata source retains the build-host guest resolver"
+        )
+    libseccomp_installer = repo / "ci/install_libseccomp.sh"
+    execute_mask = stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH
+    if libseccomp_installer.stat().st_mode & execute_mask != execute_mask:
+        raise MaterialError(
+            "prepared Kata libseccomp installer must be executable by the builder UID"
         )
     packaging = (
         repo
