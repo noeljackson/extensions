@@ -90,3 +90,20 @@ The outputs are local OCI archives plus non-secret material receipts. Publishing
 them is OP-1 and requires its separate action-scoped authority. Never replace a
 failed exact build with an upstream static tarball, a branch/tag source, or a
 commodity/local-path fallback.
+
+Before publication, directly boot the exact final OCI payload under local QEMU
+TCG:
+
+```bash
+CODEWIRE_CONFIDENTIAL_STORAGE_SCRATCH_ROOT="$PWD/_out/scratch" \
+  ./hack/codewire-confidential-storage/qemu-tcg-boot-smoke \
+  _out/confidential-storage/kata-extension/kata-extension.oci.tar
+```
+
+The smoke parses both measured-disk bindings from the final runtime-rs config,
+boots the packaged kernel with the packaged confidential root and CoCo extension
+disks, and requires dm-verity root activation, the extension mount, and Kata
+Agent readiness. It retains its private full log directory on failure and emits
+only fixed structural claims on success. This is a fast guest-boot contract
+test; it does not emulate `/dev/sev`, produce an SNP report, or replace live SNP
+attestation and storage acceptance.
