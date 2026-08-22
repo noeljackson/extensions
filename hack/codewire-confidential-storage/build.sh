@@ -172,7 +172,7 @@ verify_kata_static() (
   require_command readelf
   require_command sfdisk
 
-  local audit_dir image coco_extension_image coco_root_hash rootfs shim kata_ctl runtime_config commodity_runtime_config cdh_output partition_json sector_size partition_start partition_size
+  local audit_dir image coco_extension_image coco_root_hash rootfs shim kata_ctl runtime_config commodity_runtime_config cdh_output resolver_output partition_json sector_size partition_start partition_size
   local program_headers dynamic_tags
   audit_dir="$(new_work_dir)"
   trap 'remove_tree "${audit_dir:-}"' EXIT
@@ -254,11 +254,18 @@ PY
     jq -r '.kata_build_contract.required_guest_tools | to_entries[] | [.key, .value[0], .value[1]] | @tsv' "$lock_file"
   )
 
+  resolver_output="$(debugfs -R 'stat /etc/resolv.conf' "$rootfs" 2>&1 || true)"
+  if [[ "$resolver_output" == *'File not found'* || "$resolver_output" != *'Inode:'* ]]; then
+    die "confidential guest image lacks /etc/resolv.conf"
+  fi
+  grep -Eq '(^|[[:space:]])Size:[[:space:]]+0([[:space:]]|$)' <<<"$resolver_output" \
+    || die "confidential guest image retains a non-empty build-host resolver"
+
   cdh_output="$(debugfs -R 'stat /usr/local/bin/confidential-data-hub' "$rootfs" 2>&1 || true)"
   if [[ "$cdh_output" == *'File not found'* || "$cdh_output" != *'Inode:'* ]]; then
     die "confidential guest image lacks confidential-data-hub"
   fi
-  printf 'Kata static tarball contains the exact runtime and required guest storage tools\n'
+  printf 'Kata static tarball contains the exact runtime, empty resolver, and required guest storage tools\n'
 )
 
 overlay_confidential_payload() {

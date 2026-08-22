@@ -571,6 +571,17 @@ def verify_prepared_kata(lock: dict[str, Any], repo: Path) -> None:
             raise MaterialError(
                 f"prepared Kata source lacks required package {package}"
             )
+    rootfs_builder = (
+        repo / "tools/osbuilder/rootfs-builder/rootfs.sh"
+    ).read_text(encoding="utf-8")
+    if rootfs_builder.count(': > "${dns_file}"') != 1:
+        raise MaterialError(
+            "prepared Kata source does not clear the guest resolver before image creation"
+        )
+    if 'touch "${dns_file}"' in rootfs_builder:
+        raise MaterialError(
+            "prepared Kata source retains the build-host guest resolver"
+        )
     packaging = (
         repo
         / "tools/packaging/kata-deploy/local-build/kata-deploy-binaries.sh"
