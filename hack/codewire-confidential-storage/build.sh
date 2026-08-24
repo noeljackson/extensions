@@ -302,6 +302,7 @@ overlay_confidential_payload() {
   local static_root=$1
   local rootfs=$2
   local source destination confidential_verity_params qemu_snp_config expected_overhead_memory
+  local cdh_api_timeout_seconds cdh_api_timeout_ms create_container_timeout_seconds
 
   source="$static_root/opt/kata/runtime-rs/bin/containerd-shim-kata-v2"
   has_executable_mode "$source" || die "exact Kata runtime-rs shim is missing or has no executable mode bit"
@@ -344,6 +345,9 @@ overlay_confidential_payload() {
   qemu_snp_config="$rootfs/usr/local/share/kata-containers/configuration-qemu-snp.toml"
   install -D -m 0644 "$source" "$qemu_snp_config"
   expected_overhead_memory="$(lock_value '.kata_build_contract.qemu_snp_overhead_memory_mib')"
+  cdh_api_timeout_seconds="$(lock_value '.kata_build_contract.cdh_api_timeout_seconds')"
+  cdh_api_timeout_ms="$((cdh_api_timeout_seconds * 1000))"
+  create_container_timeout_seconds="$(lock_value '.kata_build_contract.create_container_timeout_seconds')"
   [[ "$(grep -Ec '^overhead_memory = [0-9]+$' "$qemu_snp_config")" -eq 1 ]] \
     || die "QEMU-SNP configuration does not have exactly one memory-overhead assignment"
   sed -i \
@@ -352,7 +356,8 @@ overlay_confidential_payload() {
     -e 's#path = "/usr/local/bin/qemu-system-x86_64"#path = "/usr/local/bin/qemu-system-x86_64-snp-experimental"#' \
     -e 's#valid_hypervisor_paths = \["/usr/local/bin/qemu-system-x86_64"\]#valid_hypervisor_paths = ["/usr/local/bin/qemu-system-x86_64-snp-experimental"]#' \
     -e 's#shared_fs = "virtio-fs"#shared_fs = "none"#' \
-    -e 's#create_container_timeout = [0-9][0-9]*#create_container_timeout = 180#' \
+    -e "s#create_container_timeout = [0-9][0-9]*#create_container_timeout = ${create_container_timeout_seconds}#" \
+    -e "s#cdh_api_timeout_ms = [0-9][0-9]*#cdh_api_timeout_ms = ${cdh_api_timeout_ms}#" \
     -e "s#^overhead_memory = [0-9][0-9]*\$#overhead_memory = ${expected_overhead_memory}#" \
     "$qemu_snp_config"
   IFS= read -r confidential_verity_params < \
@@ -395,6 +400,10 @@ PY
     || die "QEMU-SNP configuration does not preserve shared_fs=none"
   grep -Fqx "overhead_memory = ${expected_overhead_memory}" "$qemu_snp_config" \
     || die "QEMU-SNP configuration does not match the locked guest memory overhead"
+  grep -Fqx "create_container_timeout = ${create_container_timeout_seconds}" "$qemu_snp_config" \
+    || die "QEMU-SNP configuration does not match the bounded persistent-volume CreateContainer timeout"
+  grep -Fqx "cdh_api_timeout_ms = ${cdh_api_timeout_ms}" "$qemu_snp_config" \
+    || die "QEMU-SNP configuration does not match the bounded persistent-volume CDH timeout"
   grep -Fqx 'image = "/usr/local/share/kata-containers/kata-containers-confidential.img"' \
     "$rootfs/usr/local/share/kata-containers/configuration-qemu-snp.toml" \
     || die "QEMU-SNP configuration does not use its dedicated confidential root image"

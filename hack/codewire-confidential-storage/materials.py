@@ -258,6 +258,9 @@ def validate_lock(lock: dict[str, Any]) -> None:
         {
             "guest_artifact_variant",
             "qemu_snp_overhead_memory_mib",
+            "persistent_volume_max_gib",
+            "cdh_api_timeout_seconds",
+            "create_container_timeout_seconds",
             "input_files",
             "required_packages",
             "required_guest_tools",
@@ -271,6 +274,18 @@ def validate_lock(lock: dict[str, Any]) -> None:
     if kata["qemu_snp_overhead_memory_mib"] != 2048:
         raise MaterialError(
             "Kata QEMU-SNP guest overhead must remain the locked 2048 MiB budget"
+        )
+    if kata["persistent_volume_max_gib"] != 50:
+        raise MaterialError(
+            "Kata persistent-volume contract must be bounded to 50 GiB"
+        )
+    if kata["cdh_api_timeout_seconds"] != 1200:
+        raise MaterialError(
+            "Kata CDH API timeout must match the bounded 50 GiB initialization contract"
+        )
+    if kata["create_container_timeout_seconds"] != 1350:
+        raise MaterialError(
+            "Kata CreateContainer timeout must leave headroom above the CDH API timeout"
         )
     validate_input_files(kata["input_files"], "kata_build_contract")
     if kata["required_packages"] != ["cryptsetup-bin", "dmsetup", "e2fsprogs"]:

@@ -33,12 +33,12 @@ class MaterialTests(unittest.TestCase):
                 "e8bd7d056bef8b8f378b966f72c1c41a0964c477",
             ),
             "guest_components": (
-                "30bfb04e724e9989cd10d2a589f606b11f2bb9e4",
-                "e89bebcfe8a01783c17aee87c394204515cc755c",
+                "541420f6062b6c5f720936912e3293390ee1e963",
+                "7bbe7698cc0600cf8e39c120c798878218f790b6",
             ),
             "kata_containers": (
-                "8fb41f366ceb83b173a2485c05bf2b2176a251ee",
-                "481f715a24ddbee81e51903cf3977d90983d1910",
+                "4326ed76bc3858e793c0bdfeb0b81c0dec37366a",
+                "5ff162fe059440deea192a595dbb93a8820bf95c",
             ),
             "longhorn_manager": (
                 "4871f7092d048bdae99880006cd6add84f896f6a",
@@ -61,6 +61,16 @@ class MaterialTests(unittest.TestCase):
         self.assertEqual(
             self.lock["kata_build_contract"]["qemu_snp_overhead_memory_mib"],
             2048,
+        )
+        self.assertEqual(
+            self.lock["kata_build_contract"]["persistent_volume_max_gib"], 50
+        )
+        self.assertEqual(
+            self.lock["kata_build_contract"]["cdh_api_timeout_seconds"], 1200
+        )
+        self.assertEqual(
+            self.lock["kata_build_contract"]["create_container_timeout_seconds"],
+            1350,
         )
         self.assertEqual(
             self.lock["talos_extensions"]["installer_profile"],
@@ -95,6 +105,22 @@ class MaterialTests(unittest.TestCase):
         changed = copy.deepcopy(self.lock)
         changed["kata_build_contract"]["qemu_snp_overhead_memory_mib"] = 128
         with self.assertRaisesRegex(materials.MaterialError, "2048 MiB"):
+            materials.validate_lock(changed)
+
+    def test_persistent_volume_deadlines_are_a_fixed_nested_contract(self) -> None:
+        changed = copy.deepcopy(self.lock)
+        changed["kata_build_contract"]["persistent_volume_max_gib"] = 51
+        with self.assertRaisesRegex(materials.MaterialError, "bounded to 50 GiB"):
+            materials.validate_lock(changed)
+
+        changed = copy.deepcopy(self.lock)
+        changed["kata_build_contract"]["cdh_api_timeout_seconds"] = 50
+        with self.assertRaisesRegex(materials.MaterialError, "50 GiB initialization"):
+            materials.validate_lock(changed)
+
+        changed = copy.deepcopy(self.lock)
+        changed["kata_build_contract"]["create_container_timeout_seconds"] = 1200
+        with self.assertRaisesRegex(materials.MaterialError, "headroom above"):
             materials.validate_lock(changed)
 
     def test_digest_only_images_and_servernet_profile_are_required(self) -> None:
@@ -394,7 +420,7 @@ class MaterialTests(unittest.TestCase):
                 )
                 text = (first / name).read_text(encoding="utf-8")
                 self.assertNotRegex(text.lower(), r"password|private_key|admin_token")
-                self.assertIn("8fb41f366ceb83b173a2485c05bf2b2176a251ee", text)
+                self.assertIn("4326ed76bc3858e793c0bdfeb0b81c0dec37366a", text)
 
     def test_oci_subject_uses_platform_manifest_and_checks_attestations(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

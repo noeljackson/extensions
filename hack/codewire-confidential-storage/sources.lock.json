@@ -3,7 +3,7 @@
   "platforms": [
     "linux/amd64"
   ],
-  "source_date_epoch": 1787580294,
+  "source_date_epoch": 1787603110,
   "sources": {
     "extensions": {
       "repository": "https://github.com/noeljackson/extensions",
@@ -18,24 +18,24 @@
     },
     "guest_components": {
       "repository": "https://github.com/noeljackson/guest-components",
-      "revision": "30bfb04e724e9989cd10d2a589f606b11f2bb9e4",
-      "tree": "e89bebcfe8a01783c17aee87c394204515cc755c",
-      "source_date_epoch": 1787580294,
+      "revision": "541420f6062b6c5f720936912e3293390ee1e963",
+      "tree": "7bbe7698cc0600cf8e39c120c798878218f790b6",
+      "source_date_epoch": 1787603110,
       "archive": {
-        "url": "https://codeload.github.com/noeljackson/guest-components/tar.gz/30bfb04e724e9989cd10d2a589f606b11f2bb9e4",
-        "sha256": "4e207bfee8904b14ad874d66edf96ea5ecf747c63c8d86611a97b1eb88b4b8e3",
-        "sha512": "08131dde0f226125f78d7e876ccdf047d462d74fb2a2ddcdc385fc0d146abf2762f4435ad14039237d9c4b663161c6154a678bc585289ad72faf98661add9879"
+        "url": "https://codeload.github.com/noeljackson/guest-components/tar.gz/541420f6062b6c5f720936912e3293390ee1e963",
+        "sha256": "8c69e72c9774cdeefe9084f8694307c968642ad80b0db2ccdd611f7d08b6cfaf",
+        "sha512": "295b06a93a20ca1e2ed760ec745bd5367e7b1bf67dfb04eefe699d15850967f04c8f639b33675f5d670f968d74bd4c8f9f65fbd9cf4558f729f9562df1710b27"
       }
     },
     "kata_containers": {
       "repository": "https://github.com/noeljackson/kata-containers",
-      "revision": "8fb41f366ceb83b173a2485c05bf2b2176a251ee",
-      "tree": "481f715a24ddbee81e51903cf3977d90983d1910",
-      "source_date_epoch": 1787435839,
+      "revision": "4326ed76bc3858e793c0bdfeb0b81c0dec37366a",
+      "tree": "5ff162fe059440deea192a595dbb93a8820bf95c",
+      "source_date_epoch": 1787603110,
       "archive": {
-        "url": "https://codeload.github.com/noeljackson/kata-containers/tar.gz/8fb41f366ceb83b173a2485c05bf2b2176a251ee",
-        "sha256": "61fb9b7d706bfcfb80c0d830817ad58c8af2e13e03284019a09a7736909d7e38",
-        "sha512": "c6a786ab38c1ffd5e94957ba6a22b7bd1b3350a0f56e359677aec051d26b21f48358550f0d70d9108032afb422b933517a1ad5ac36fddd31fdf6d0c5103300fa"
+        "url": "https://codeload.github.com/noeljackson/kata-containers/tar.gz/4326ed76bc3858e793c0bdfeb0b81c0dec37366a",
+        "sha256": "7657cb465cc951f6abc192826bcfab048efe85a7ba448b6e954a498a239958b7",
+        "sha512": "530acb5044254ae8e0efa8b92cebe8b645ed1fee53e9d35cd87ae10412855ebe6b9b1e1b8a43ac2c6da6aa6cd4f480eed8eedff2a2114acc8bba2d13024ce236"
       }
     },
     "longhorn_manager": {
@@ -95,6 +95,9 @@
   "kata_build_contract": {
     "guest_artifact_variant": "ubuntu24.04",
     "qemu_snp_overhead_memory_mib": 2048,
+    "persistent_volume_max_gib": 50,
+    "cdh_api_timeout_seconds": 1200,
+    "create_container_timeout_seconds": 1350,
     "input_files": {
       "ci/install_libseccomp.sh": "3e0ffc7f8a78b3bb787397abd119a558ff4e3e1ea74383ed3147953ff875b6b4",
       "src/runtime-rs/crates/runtimes/common/src/types/trans_from_shim.rs": "7337e1d98110b6670f1a8a7615f6313df92a7b461ca87b50609deaa5c438c783",
