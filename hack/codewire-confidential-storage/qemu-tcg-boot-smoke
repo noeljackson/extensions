@@ -12,6 +12,8 @@ require_command() {
 
 [[ $# -eq 1 ]] || die "usage: $0 KATA_EXTENSION_OCI_ARCHIVE"
 
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 for command in jq python3 qemu-system-x86_64 sed skopeo tar timeout; do
   require_command "$command"
 done
@@ -19,6 +21,7 @@ done
 archive=$1
 [[ -f "$archive" ]] || die "Kata extension OCI archive does not exist: $archive"
 archive="$(realpath "$archive")"
+expected_overhead_memory="$(jq -er '.kata_build_contract.qemu_snp_overhead_memory_mib' "$script_dir/sources.lock.json")"
 
 scratch_root=${CODEWIRE_CONFIDENTIAL_STORAGE_SCRATCH_ROOT:-/tmp}
 [[ "$scratch_root" == /* ]] || die "scratch root must be absolute"
@@ -72,15 +75,19 @@ mapfile -t boot_values < <(
   python3 - \
     "$payload/configuration-qemu-snp.toml" \
     "$payload/root_hash_confidential.txt" \
-    "$payload/root_hash_coco-extension.txt" <<'PY'
+    "$payload/root_hash_coco-extension.txt" \
+    "$expected_overhead_memory" <<'PY'
 import pathlib
 import re
 import sys
 import tomllib
 
-config_path, root_path, coco_path = map(pathlib.Path, sys.argv[1:])
+config_path, root_path, coco_path = map(pathlib.Path, sys.argv[1:4])
+expected_overhead_memory = int(sys.argv[4])
 config = tomllib.loads(config_path.read_text())
 qemu = config.get("hypervisor", {}).get("qemu", {})
+if qemu.get("overhead_memory") != expected_overhead_memory:
+    raise SystemExit("QEMU-SNP memory overhead differs from the confidential RuntimeClass contract")
 pattern = re.compile(
     r"root_hash=([0-9a-f]{64}),salt=([0-9a-f]{64}),"
     r"data_blocks=([1-9][0-9]*),data_block_size=([1-9][0-9]*),"
