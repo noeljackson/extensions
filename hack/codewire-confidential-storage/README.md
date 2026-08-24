@@ -83,6 +83,17 @@ The expensive amd64 recipe is deliberately separate from publication:
   longhorn-image _out/confidential-storage/longhorn-manager
 ```
 
+When the guest-components target itself is the unresolved boundary, build only
+that immutable input before starting the full Kata closure:
+
+```bash
+./hack/codewire-confidential-storage/build.sh \
+  kata-guest-components _out/confidential-storage/kata-static-coco-guest-components.tar.zst
+```
+
+Successful builds remove their private scratch worktree. Failed builds retain
+it and print the exact path so the target's local build log remains available.
+
 The default scratch root is the ignored
 `hack/codewire-confidential-storage/_out/scratch` directory. Set
 `CODEWIRE_CONFIDENTIAL_STORAGE_SCRATCH_ROOT` to another absolute, dedicated

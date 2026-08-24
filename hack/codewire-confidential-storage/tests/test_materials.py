@@ -698,6 +698,10 @@ agent_name = "kata"
             'built_tarball="$local_build/kata-static.tar.zst"',
             recipe,
         )
+        self.assertIn("kata-guest-components)", recipe)
+        self.assertIn("BASE_TARBALLS=coco-guest-components-tarball", recipe)
+        self.assertIn("failed build work directory retained", recipe)
+        self.assertNotIn("trap 'remove_tree", recipe)
         self.assertIn("STATIC_RUNTIME=yes USE_CACHE=no", recipe)
         self.assertIn("readelf -l", recipe)
         self.assertIn("readelf -d", recipe)

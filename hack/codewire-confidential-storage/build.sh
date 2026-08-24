@@ -57,6 +57,8 @@ Commands:
       Copy and prepare the exact Kata source with the accepted guest/tool inputs.
   kata-static OUTPUT_TARBALL [KATA_REPOSITORY]
       Build the exact amd64 Kata static tarball. Registry caches and pushes are disabled.
+  kata-guest-components OUTPUT_TARBALL [KATA_REPOSITORY]
+      Build only the exact CoCo guest-components tarball for a focused local diagnostic loop.
   verify-kata-static KATA_TARBALL
       Prove the confidential image contains the required block-encryption/ext4 tools.
   kata-extension KATA_TARBALL OUTPUT_DIRECTORY
@@ -110,6 +112,18 @@ remove_tree() {
       fi
     fi
   fi
+}
+
+cleanup_or_retain_work_dir() {
+  local rc=$?
+  local task_tree=$1
+  if (( rc == 0 )); then
+    remove_tree "$task_tree"
+  elif [[ -n "$task_tree" && -d "$task_tree" ]]; then
+    chmod 0700 "$task_tree" 2>/dev/null || true
+    printf 'error: failed build work directory retained at %s\n' "$task_tree" >&2
+  fi
+  return "$rc"
 }
 
 new_work_dir() {
@@ -191,7 +205,7 @@ verify_kata_static() (
   local audit_dir image coco_extension_image coco_root_hash rootfs shim kata_ctl runtime_config commodity_runtime_config cdh_output resolver_output partition_json sector_size partition_start partition_size
   local program_headers dynamic_tags
   audit_dir="$(new_work_dir)"
-  trap 'remove_tree "${audit_dir:-}"' EXIT
+  trap 'cleanup_or_retain_work_dir "${audit_dir:-}"' EXIT
   tar --zstd -xf "$tarball" -C "$audit_dir"
   image="$(unique_file "$audit_dir" '*/opt/kata/share/kata-containers/kata-containers-confidential.img')"
   coco_extension_image="$(unique_file "$audit_dir" '*/opt/kata/share/kata-containers/kata-containers-coco-extension.img')"
@@ -433,7 +447,7 @@ case "$command" in
     require_command python3
     output_tarball=$2
     work_dir="$(new_work_dir)"
-    trap 'remove_tree "${work_dir:-}"' EXIT
+    trap 'cleanup_or_retain_work_dir "${work_dir:-}"' EXIT
     source_repo=${3:-}
     if [[ -z "$source_repo" ]]; then
       checkout_locked_source kata_containers "$work_dir/kata-source"
@@ -472,6 +486,37 @@ case "$command" in
       --artifact "kata-static.tar.zst=${output_tarball}"
     ;;
 
+  kata-guest-components)
+    [[ $# -eq 2 || $# -eq 3 ]] || \
+      die "kata-guest-components requires OUTPUT_TARBALL [KATA_REPOSITORY]"
+    require_command docker
+    require_command git
+    require_command make
+    require_command python3
+    output_tarball=$2
+    work_dir="$(new_work_dir)"
+    trap 'cleanup_or_retain_work_dir "${work_dir:-}"' EXIT
+    source_repo=${3:-}
+    if [[ -z "$source_repo" ]]; then
+      checkout_locked_source kata_containers "$work_dir/kata-source"
+      source_repo="$work_dir/kata-source"
+    else
+      python3 "$materials_tool" --lock "$lock_file" verify-git --source kata_containers --repo "$source_repo"
+    fi
+    python3 "$materials_tool" --lock "$lock_file" prepare-kata \
+      --repo "$source_repo" --output "$work_dir/kata-prepared"
+    local_build="$work_dir/kata-prepared/tools/packaging/kata-deploy/local-build"
+    STATIC_RUNTIME=yes USE_CACHE=no PUSH_TO_REGISTRY=no RELEASE=yes \
+      make -C "$local_build" -f "$local_build/Makefile" all \
+      --output-sync=target V= \
+      BASE_TARBALLS=coco-guest-components-tarball \
+      DEPS=
+    built_tarball="$local_build/kata-static-coco-guest-components.tar.zst"
+    [[ -f "$built_tarball" ]] || die "Kata build did not produce the CoCo guest-components tarball"
+    mkdir -p "$(dirname "$output_tarball")"
+    cp "$built_tarball" "$output_tarball"
+    ;;
+
   verify-kata-static)
     [[ $# -eq 2 ]] || die "verify-kata-static requires KATA_TARBALL"
     verify_kata_static "$2"
@@ -489,10 +534,7 @@ case "$command" in
     verify_kata_static "$kata_tarball"
     mkdir -p "$output_dir"
     work_dir="$(new_work_dir)"
-    cleanup_extension() {
-      remove_tree "$work_dir"
-    }
-    trap cleanup_extension EXIT
+    trap 'cleanup_or_retain_work_dir "${work_dir:-}"' EXIT
     mkdir -p "$work_dir/context/extension" "$work_dir/static"
     base_image="$(lock_value '.base_images.kata_talos_extension')"
     docker buildx build \
@@ -540,7 +582,7 @@ case "$command" in
     output_dir=$2
     mkdir -p "$output_dir"
     work_dir="$(new_work_dir)"
-    trap 'remove_tree "${work_dir:-}"' EXIT
+    trap 'cleanup_or_retain_work_dir "${work_dir:-}"' EXIT
     source_repo=${3:-}
     if [[ -z "$source_repo" ]]; then
       checkout_locked_source longhorn_manager "$work_dir/longhorn-source"
