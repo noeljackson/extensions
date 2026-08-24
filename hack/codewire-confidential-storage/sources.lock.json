@@ -94,6 +94,7 @@
   },
   "kata_build_contract": {
     "guest_artifact_variant": "ubuntu24.04",
+    "qemu_snp_overhead_memory_mib": 2048,
     "input_files": {
       "ci/install_libseccomp.sh": "3e0ffc7f8a78b3bb787397abd119a558ff4e3e1ea74383ed3147953ff875b6b4",
       "src/runtime-rs/crates/runtimes/common/src/types/trans_from_shim.rs": "7337e1d98110b6670f1a8a7615f6313df92a7b461ca87b50609deaa5c438c783",

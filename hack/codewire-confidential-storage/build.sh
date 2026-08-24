@@ -301,7 +301,7 @@ PY
 overlay_confidential_payload() {
   local static_root=$1
   local rootfs=$2
-  local source destination confidential_verity_params
+  local source destination confidential_verity_params qemu_snp_config expected_overhead_memory
 
   source="$static_root/opt/kata/runtime-rs/bin/containerd-shim-kata-v2"
   has_executable_mode "$source" || die "exact Kata runtime-rs shim is missing or has no executable mode bit"
@@ -341,7 +341,11 @@ overlay_confidential_payload() {
     || die "final commodity configuration contains a legacy Go-runtime dial timeout"
 
   source="$(unique_file "$static_root" '*/opt/kata/share/defaults/kata-containers/runtime-rs/configuration-qemu-snp-runtime-rs.toml')"
-  install -D -m 0644 "$source" "$rootfs/usr/local/share/kata-containers/configuration-qemu-snp.toml"
+  qemu_snp_config="$rootfs/usr/local/share/kata-containers/configuration-qemu-snp.toml"
+  install -D -m 0644 "$source" "$qemu_snp_config"
+  expected_overhead_memory="$(lock_value '.kata_build_contract.qemu_snp_overhead_memory_mib')"
+  [[ "$(grep -Ec '^overhead_memory = [0-9]+$' "$qemu_snp_config")" -eq 1 ]] \
+    || die "QEMU-SNP configuration does not have exactly one memory-overhead assignment"
   sed -i \
     -e 's#/opt/kata#/usr/local#g' \
     -e 's#^image = "/usr/local/share/kata-containers/kata-containers.img"$#image = "/usr/local/share/kata-containers/kata-containers-confidential.img"#' \
@@ -349,7 +353,8 @@ overlay_confidential_payload() {
     -e 's#valid_hypervisor_paths = \["/usr/local/bin/qemu-system-x86_64"\]#valid_hypervisor_paths = ["/usr/local/bin/qemu-system-x86_64-snp-experimental"]#' \
     -e 's#shared_fs = "virtio-fs"#shared_fs = "none"#' \
     -e 's#create_container_timeout = [0-9][0-9]*#create_container_timeout = 180#' \
-    "$rootfs/usr/local/share/kata-containers/configuration-qemu-snp.toml"
+    -e "s#^overhead_memory = [0-9][0-9]*\$#overhead_memory = ${expected_overhead_memory}#" \
+    "$qemu_snp_config"
   IFS= read -r confidential_verity_params < \
     "$rootfs/usr/local/share/kata-containers/root_hash_confidential.txt"
   [[ -n "$confidential_verity_params" ]] || \
@@ -388,6 +393,8 @@ PY
   fi
   grep -Eq '^shared_fs = "none"$' "$rootfs/usr/local/share/kata-containers/configuration-qemu-snp.toml" \
     || die "QEMU-SNP configuration does not preserve shared_fs=none"
+  grep -Fqx "overhead_memory = ${expected_overhead_memory}" "$qemu_snp_config" \
+    || die "QEMU-SNP configuration does not match the confidential RuntimeClass memory overhead"
   grep -Fqx 'image = "/usr/local/share/kata-containers/kata-containers-confidential.img"' \
     "$rootfs/usr/local/share/kata-containers/configuration-qemu-snp.toml" \
     || die "QEMU-SNP configuration does not use its dedicated confidential root image"

@@ -59,6 +59,10 @@ class MaterialTests(unittest.TestCase):
             "ubuntu24.04",
         )
         self.assertEqual(
+            self.lock["kata_build_contract"]["qemu_snp_overhead_memory_mib"],
+            2048,
+        )
+        self.assertEqual(
             self.lock["talos_extensions"]["installer_profile"],
             "servernet-confidential-storage-only",
         )
@@ -85,6 +89,12 @@ class MaterialTests(unittest.TestCase):
         changed = copy.deepcopy(self.lock)
         changed["kata_build_contract"]["guest_artifact_variant"] = "latest"
         with self.assertRaisesRegex(materials.MaterialError, "Ubuntu 24.04"):
+            materials.validate_lock(changed)
+
+    def test_qemu_snp_overhead_matches_runtimeclass_contract(self) -> None:
+        changed = copy.deepcopy(self.lock)
+        changed["kata_build_contract"]["qemu_snp_overhead_memory_mib"] = 128
+        with self.assertRaisesRegex(materials.MaterialError, "2 GiB"):
             materials.validate_lock(changed)
 
     def test_digest_only_images_and_servernet_profile_are_required(self) -> None:

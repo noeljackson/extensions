@@ -257,6 +257,7 @@ def validate_lock(lock: dict[str, Any]) -> None:
         kata,
         {
             "guest_artifact_variant",
+            "qemu_snp_overhead_memory_mib",
             "input_files",
             "required_packages",
             "required_guest_tools",
@@ -266,6 +267,10 @@ def validate_lock(lock: dict[str, Any]) -> None:
     if kata["guest_artifact_variant"] != "ubuntu24.04":
         raise MaterialError(
             "Kata guest artifact variant must select the fixed Ubuntu 24.04 image"
+        )
+    if kata["qemu_snp_overhead_memory_mib"] != 2048:
+        raise MaterialError(
+            "Kata QEMU-SNP overhead must match the 2 GiB confidential RuntimeClass contract"
         )
     validate_input_files(kata["input_files"], "kata_build_contract")
     if kata["required_packages"] != ["cryptsetup-bin", "dmsetup", "e2fsprogs"]:
