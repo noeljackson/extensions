@@ -737,6 +737,13 @@ agent_name = "kata"
         self.assertIn("rootfs-initrd-confidential-tarball", recipe)
         self.assertIn("qemu-snp-experimental-tarball", recipe)
         self.assertIn("sfdisk --json", recipe)
+
+        smoke = (SCRIPT_DIR / "qemu-tcg-boot-smoke").read_text(encoding="utf-8")
+        self.assertIn("console=ttyS0,115200", smoke)
+        self.assertIn("earlyprintk=serial,ttyS0,115200", smoke)
+        self.assertIn("ignore_loglevel", smoke)
+        self.assertIn('-serial "file:$raw_log"', smoke)
+        self.assertNotIn("-serial stdio", smoke)
         self.assertIn(".bootable == true", recipe)
         self.assertNotIn("rootfs-image-mariner-tarball", recipe)
         self.assertNotIn("qemu-tdx-experimental-tarball", recipe)
