@@ -91,10 +91,10 @@ class MaterialTests(unittest.TestCase):
         with self.assertRaisesRegex(materials.MaterialError, "Ubuntu 24.04"):
             materials.validate_lock(changed)
 
-    def test_qemu_snp_overhead_matches_runtimeclass_contract(self) -> None:
+    def test_qemu_snp_guest_overhead_is_locked(self) -> None:
         changed = copy.deepcopy(self.lock)
         changed["kata_build_contract"]["qemu_snp_overhead_memory_mib"] = 128
-        with self.assertRaisesRegex(materials.MaterialError, "2 GiB"):
+        with self.assertRaisesRegex(materials.MaterialError, "2048 MiB"):
             materials.validate_lock(changed)
 
     def test_digest_only_images_and_servernet_profile_are_required(self) -> None:

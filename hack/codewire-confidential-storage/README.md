@@ -127,13 +127,17 @@ only fixed structural claims on success. This is a fast guest-boot contract
 test; it does not emulate `/dev/sev`, produce an SNP report, or replace live SNP
 attestation and storage acceptance.
 
-The source lock also binds the final QEMU-SNP `overhead_memory` to 2048 MiB,
-matching the `confidential` RuntimeClass `podFixed.memory: 2Gi` contract. The
-downstream packaging overlay applies this deployment value without modifying
-or rebuilding the immutable upstream Kata binaries and measured guest disks.
-Runtime-rs static sizing launches the VM with the workload memory limit plus
-this overhead. It includes the encrypted `/run` workspace used by guest image
-pulling; leaving Kata at its 128 MiB upstream default while Kubernetes reserves
-2 GiB can produce a schedulable pod whose guest runs out of space during image
-unpack. Change the RuntimeClass and this lock together, and require the final-
-archive smoke plus a live QEMU memory receipt before acceptance.
+The source lock also binds the final QEMU-SNP guest-side `overhead_memory` to
+2048 MiB. The downstream packaging overlay applies this deployment value
+without modifying or rebuilding the immutable upstream Kata binaries and
+measured guest disks. Runtime-rs static sizing launches the VM with the
+workload memory limit plus this overhead, including the encrypted `/run`
+workspace used by guest image pulling.
+
+Kubernetes RuntimeClass overhead is a separate pod-cgroup budget. It must cover
+the guest overhead plus the host QEMU margin; making it equal to the guest
+overhead leaves no room for QEMU and causes a memory-cgroup OOM. Codewire
+preserves the upstream SNP margin when changing the guest budget:
+`2048 + (2048 - 128) = 3968 MiB`. Change these contracts coherently, and
+require the final-archive smoke plus a live QEMU memory receipt before
+acceptance.

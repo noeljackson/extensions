@@ -270,7 +270,7 @@ def validate_lock(lock: dict[str, Any]) -> None:
         )
     if kata["qemu_snp_overhead_memory_mib"] != 2048:
         raise MaterialError(
-            "Kata QEMU-SNP overhead must match the 2 GiB confidential RuntimeClass contract"
+            "Kata QEMU-SNP guest overhead must remain the locked 2048 MiB budget"
         )
     validate_input_files(kata["input_files"], "kata_build_contract")
     if kata["required_packages"] != ["cryptsetup-bin", "dmsetup", "e2fsprogs"]:
