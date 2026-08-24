@@ -33,8 +33,8 @@ class MaterialTests(unittest.TestCase):
                 "e8bd7d056bef8b8f378b966f72c1c41a0964c477",
             ),
             "guest_components": (
-                "4f851920f568067ba6ad7542f986f69775f28ea3",
-                "8468a2595cf7522e769ed33f62fb27e266137108",
+                "30bfb04e724e9989cd10d2a589f606b11f2bb9e4",
+                "e89bebcfe8a01783c17aee87c394204515cc755c",
             ),
             "kata_containers": (
                 "8fb41f366ceb83b173a2485c05bf2b2176a251ee",
@@ -698,6 +698,14 @@ agent_name = "kata"
             'built_tarball="$local_build/kata-static.tar.zst"',
             recipe,
         )
+        self.assertIn("kata-guest-components)", recipe)
+        self.assertIn("BASE_TARBALLS=coco-guest-components-tarball", recipe)
+        self.assertIn(
+            'built_tarball="$local_build/build/kata-static-coco-guest-components.tar.zst"',
+            recipe,
+        )
+        self.assertIn("failed build work directory retained", recipe)
+        self.assertNotIn("trap 'remove_tree", recipe)
         self.assertIn("STATIC_RUNTIME=yes USE_CACHE=no", recipe)
         self.assertIn("readelf -l", recipe)
         self.assertIn("readelf -d", recipe)
@@ -729,6 +737,13 @@ agent_name = "kata"
         self.assertIn("rootfs-initrd-confidential-tarball", recipe)
         self.assertIn("qemu-snp-experimental-tarball", recipe)
         self.assertIn("sfdisk --json", recipe)
+
+        smoke = (SCRIPT_DIR / "qemu-tcg-boot-smoke").read_text(encoding="utf-8")
+        self.assertIn("console=ttyS0,115200", smoke)
+        self.assertIn("earlyprintk=serial,ttyS0,115200", smoke)
+        self.assertIn("ignore_loglevel", smoke)
+        self.assertIn('-serial "file:$raw_log"', smoke)
+        self.assertNotIn("-serial stdio", smoke)
         self.assertIn(".bootable == true", recipe)
         self.assertNotIn("rootfs-image-mariner-tarball", recipe)
         self.assertNotIn("qemu-tdx-experimental-tarball", recipe)

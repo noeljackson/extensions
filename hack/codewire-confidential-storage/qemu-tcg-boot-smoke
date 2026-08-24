@@ -138,6 +138,7 @@ sectors=${boot_values[6]}
 
 raw_log="$work_dir/tcg-boot.log"
 clean_log="$work_dir/tcg-boot.clean.log"
+qemu_log="$work_dir/qemu.log"
 qemu_status=0
 timeout --signal=TERM "${horizon}s" qemu-system-x86_64 \
   -machine q35,accel=tcg \
@@ -148,14 +149,14 @@ timeout --signal=TERM "${horizon}s" qemu-system-x86_64 \
   -no-reboot \
   -display none \
   -monitor none \
-  -serial stdio \
+  -serial "file:$raw_log" \
   -kernel "$payload/vmlinuz.container" \
-  -append "reboot=k panic=1 systemd.unit=kata-containers.target systemd.mask=systemd-networkd.service systemd.mask=systemd-networkd.socket dm-mod.create=\"dm-verity,,,ro,0 ${sectors} verity 1 /dev/vda1 /dev/vda2 ${data_block_size} ${hash_block_size} ${data_blocks} 0 sha256 ${root_hash} ${salt}\" root=/dev/dm-0 rootflags=data=ordered,errors=remount-ro ro rootfstype=ext4 cgroup_no_v1=all systemd.unified_cgroup_hierarchy=1 selinux=1 kata.extension.coco.verity_params=${coco_params} console=ttyS0 systemd.log_target=console" \
+  -append "reboot=k panic=1 systemd.unit=kata-containers.target systemd.mask=systemd-networkd.service systemd.mask=systemd-networkd.socket dm-mod.create=\"dm-verity,,,ro,0 ${sectors} verity 1 /dev/vda1 /dev/vda2 ${data_block_size} ${hash_block_size} ${data_blocks} 0 sha256 ${root_hash} ${salt}\" root=/dev/dm-0 rootflags=data=ordered,errors=remount-ro ro rootfstype=ext4 cgroup_no_v1=all systemd.unified_cgroup_hierarchy=1 selinux=1 kata.extension.coco.verity_params=${coco_params} console=ttyS0,115200 earlyprintk=serial,ttyS0,115200 ignore_loglevel systemd.log_target=console" \
   -drive "if=none,file=$payload/kata-containers-confidential.img,format=raw,id=root" \
   -device virtio-blk-pci,drive=root,serial=rootfs \
   -drive "if=none,file=$payload/kata-containers-coco-extension.img,format=raw,id=coco" \
   -device virtio-blk-pci,drive=coco,serial=extension-coco \
-  >"$raw_log" 2>&1 || qemu_status=$?
+  >"$qemu_log" 2>&1 || qemu_status=$?
 
 [[ $qemu_status -eq 124 ]] \
   || die "guest exited before the bounded TCG observation horizon (status ${qemu_status})"
