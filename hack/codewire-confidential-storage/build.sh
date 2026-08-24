@@ -511,7 +511,7 @@ case "$command" in
       --output-sync=target V= \
       BASE_TARBALLS=coco-guest-components-tarball \
       DEPS=
-    built_tarball="$local_build/kata-static-coco-guest-components.tar.zst"
+    built_tarball="$local_build/build/kata-static-coco-guest-components.tar.zst"
     [[ -f "$built_tarball" ]] || die "Kata build did not produce the CoCo guest-components tarball"
     mkdir -p "$(dirname "$output_tarball")"
     cp "$built_tarball" "$output_tarball"

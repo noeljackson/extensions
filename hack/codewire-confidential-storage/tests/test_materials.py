@@ -700,6 +700,10 @@ agent_name = "kata"
         )
         self.assertIn("kata-guest-components)", recipe)
         self.assertIn("BASE_TARBALLS=coco-guest-components-tarball", recipe)
+        self.assertIn(
+            'built_tarball="$local_build/build/kata-static-coco-guest-components.tar.zst"',
+            recipe,
+        )
         self.assertIn("failed build work directory retained", recipe)
         self.assertNotIn("trap 'remove_tree", recipe)
         self.assertIn("STATIC_RUNTIME=yes USE_CACHE=no", recipe)
