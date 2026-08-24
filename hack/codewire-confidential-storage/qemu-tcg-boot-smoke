@@ -87,7 +87,7 @@ expected_overhead_memory = int(sys.argv[4])
 config = tomllib.loads(config_path.read_text())
 qemu = config.get("hypervisor", {}).get("qemu", {})
 if qemu.get("overhead_memory") != expected_overhead_memory:
-    raise SystemExit("QEMU-SNP memory overhead differs from the confidential RuntimeClass contract")
+    raise SystemExit("QEMU-SNP guest memory overhead differs from the source lock")
 pattern = re.compile(
     r"root_hash=([0-9a-f]{64}),salt=([0-9a-f]{64}),"
     r"data_blocks=([1-9][0-9]*),data_block_size=([1-9][0-9]*),"

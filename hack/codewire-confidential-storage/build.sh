@@ -394,7 +394,7 @@ PY
   grep -Eq '^shared_fs = "none"$' "$rootfs/usr/local/share/kata-containers/configuration-qemu-snp.toml" \
     || die "QEMU-SNP configuration does not preserve shared_fs=none"
   grep -Fqx "overhead_memory = ${expected_overhead_memory}" "$qemu_snp_config" \
-    || die "QEMU-SNP configuration does not match the confidential RuntimeClass memory overhead"
+    || die "QEMU-SNP configuration does not match the locked guest memory overhead"
   grep -Fqx 'image = "/usr/local/share/kata-containers/kata-containers-confidential.img"' \
     "$rootfs/usr/local/share/kata-containers/configuration-qemu-snp.toml" \
     || die "QEMU-SNP configuration does not use its dedicated confidential root image"
