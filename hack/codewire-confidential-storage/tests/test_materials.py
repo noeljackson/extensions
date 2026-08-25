@@ -33,8 +33,8 @@ class MaterialTests(unittest.TestCase):
                 "e8bd7d056bef8b8f378b966f72c1c41a0964c477",
             ),
             "guest_components": (
-                "7ef5c8d409ea34131887510abc6928beeee51e60",
-                "53d2b179b36f9bba0a151d6443a38a771e4203d9",
+                "50dbb0e595ba24f87d625c03014edc7a1369f8b9",
+                "0c466b999adf2814deca656dcdd0217e8db01f2a",
             ),
             "kata_containers": (
                 "4326ed76bc3858e793c0bdfeb0b81c0dec37366a",
