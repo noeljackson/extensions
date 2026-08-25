@@ -41,10 +41,11 @@ does not consult mutable operating-system repositories.
 - install the commodity Cloud Hypervisor config and shim from the same pinned
   runtime-rs archive, then parse the final OCI config and reject legacy
   Go-runtime fields before publication;
-- bind the confidential runtime to the 50 GiB first-use storage contract: CDH
-  receives 1200 seconds for the complete zero scan and journaled dm-integrity
-  initialization, while runtime-rs receives 1350 seconds for the containing
-  image-pull and `CreateContainer` operation;
+- bind the confidential runtime to the 50 GiB first-use storage contract:
+  image-rs accepts a per-guest resource deadline (Codewire selects 300 seconds
+  for fresh attestation), CDH receives 1200 seconds for the complete zero scan
+  and journaled dm-integrity initialization, and runtime-rs receives 1350
+  seconds for the containing image-pull and `CreateContainer` operation;
 - build only the Dev SNP artifact closure (agent, CDH, kernel, SEV firmware,
   SNP QEMU, runtime-rs shim, `kata-ctl`, confidential image/initrd, and the
   composable CoCo guest-extension disk), excluding
@@ -146,8 +147,9 @@ preserves the upstream SNP margin when changing the guest budget:
 require the final-archive smoke plus a live QEMU memory receipt before
 acceptance.
 
-The same lock owns the confidential first-use deadline pair. The inner CDH
-deadline must remain below the runtime-rs `CreateContainer` deadline, and the
-Kubernetes kubelet and product readiness deadlines must remain larger still.
-These are bounded caps for an intentionally size-linear 50 GiB operation, not
-a substitute for phase/progress evidence or permission for larger volumes.
+The same lock owns the confidential first-use CDH/runtime-rs deadline pair. The
+guest resource request selected by the product must remain below CDH, CDH must
+remain below runtime-rs `CreateContainer`, and the Kubernetes kubelet and
+product readiness deadlines must remain larger still. These are bounded caps
+for an intentionally size-linear 50 GiB operation, not a substitute for
+phase/progress evidence or permission for larger volumes.
