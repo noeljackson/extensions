@@ -3,7 +3,7 @@
   "platforms": [
     "linux/amd64"
   ],
-  "source_date_epoch": 1787700372,
+  "source_date_epoch": 1787705322,
   "sources": {
     "extensions": {
       "repository": "https://github.com/noeljackson/extensions",
@@ -29,13 +29,13 @@
     },
     "kata_containers": {
       "repository": "https://github.com/noeljackson/kata-containers",
-      "revision": "4326ed76bc3858e793c0bdfeb0b81c0dec37366a",
-      "tree": "5ff162fe059440deea192a595dbb93a8820bf95c",
-      "source_date_epoch": 1787603110,
+      "revision": "99b53ec82f10ac2bac6d9209f1e71be22b4015d4",
+      "tree": "7dc576c249b1a0730879a2b8916584a088e6b00c",
+      "source_date_epoch": 1787705322,
       "archive": {
-        "url": "https://codeload.github.com/noeljackson/kata-containers/tar.gz/4326ed76bc3858e793c0bdfeb0b81c0dec37366a",
-        "sha256": "7657cb465cc951f6abc192826bcfab048efe85a7ba448b6e954a498a239958b7",
-        "sha512": "530acb5044254ae8e0efa8b92cebe8b645ed1fee53e9d35cd87ae10412855ebe6b9b1e1b8a43ac2c6da6aa6cd4f480eed8eedff2a2114acc8bba2d13024ce236"
+        "url": "https://codeload.github.com/noeljackson/kata-containers/tar.gz/99b53ec82f10ac2bac6d9209f1e71be22b4015d4",
+        "sha256": "d44d31d5c0b18e4ad2edb10aff0d40b4f4c7bc0c777276ea972dd1fde9ccbe34",
+        "sha512": "74bae931c5a2a0c3c28b5b0b81dd92ed17c45594885570e0f574b202f1c14a66282e0a029a260541c629425ce00bc5643b85a1bd3eb8cfd9da2d2bc76bfb9729"
       }
     },
     "longhorn_manager": {
@@ -100,6 +100,7 @@
     "create_container_timeout_seconds": 1350,
     "input_files": {
       "ci/install_libseccomp.sh": "3e0ffc7f8a78b3bb787397abd119a558ff4e3e1ea74383ed3147953ff875b6b4",
+      "src/runtime-rs/crates/resource/src/volume/direct_volumes/rawblock_volume.rs": "f0c3e52165f26b4b7569fed22eeb506964009264cd3fe6698c3c076ceacea77f",
       "src/runtime-rs/crates/runtimes/common/src/types/trans_from_shim.rs": "7337e1d98110b6670f1a8a7615f6313df92a7b461ca87b50609deaa5c438c783",
       "tools/osbuilder/rootfs-builder/rootfs.sh": "78931320f2fd49918aa0dbb3b7ad744dd0b9c935688222b9ffe7178671f3f32b",
       "tools/osbuilder/rootfs-builder/ubuntu/config.sh": "0f40cd9ee3b6bcf4b456c2bd252df54891e96cee81b9b2066948f2fddfd783ea",
