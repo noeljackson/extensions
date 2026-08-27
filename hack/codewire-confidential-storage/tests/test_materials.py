@@ -33,16 +33,16 @@ class MaterialTests(unittest.TestCase):
                 "e8bd7d056bef8b8f378b966f72c1c41a0964c477",
             ),
             "guest_components": (
-                "bc5660c6c90038ced2ddefddd58aff06d5a0f0c0",
-                "83a3d104ca2803cd313454e7658bf93b710365aa",
+                "4bed1cd5c8a536cda13e1b7571bb062ae65eaaf8",
+                "8e1fc9e42e365f0275efd7ff8c2ef0443e375230",
             ),
             "kata_containers": (
-                "8cbbb7fddd93e06406eeda6e9e0b1eaff36649c7",
-                "9ac46d2c39844ef7273fae1f6edba88be1dd2c72",
+                "2a39b90a05eaae3fd3990416b3b9b3e1a8712b0c",
+                "3ad6c09ce2fbd462ba7715083cf7276a04368682",
             ),
             "longhorn_manager": (
-                "4871f7092d048bdae99880006cd6add84f896f6a",
-                "5010190ec59786c01a3b27431805018a09aa3be9",
+                "a919df62323df38e290ef491f2e685be94a488f9",
+                "ae91db05b156c8f657c66aac4b3cbda9dde1c308",
             ),
             "trustee": (
                 "258ea4acb7b9bd865fce5c63a539f2120dba8298",
@@ -420,7 +420,7 @@ class MaterialTests(unittest.TestCase):
                 )
                 text = (first / name).read_text(encoding="utf-8")
                 self.assertNotRegex(text.lower(), r"password|private_key|admin_token")
-                self.assertIn("8cbbb7fddd93e06406eeda6e9e0b1eaff36649c7", text)
+                self.assertIn("2a39b90a05eaae3fd3990416b3b9b3e1a8712b0c", text)
 
     def test_oci_subject_uses_platform_manifest_and_checks_attestations(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
