@@ -88,6 +88,20 @@ lock_sha256() {
   sha256sum "$lock_file" | awk '{print $1}'
 }
 
+verify_guest_components_artifact() {
+  local repository revision variant slug reference
+  repository="$(lock_value '.sources.guest_components.repository')"
+  revision="$(lock_value '.sources.guest_components.revision')"
+  variant="$(lock_value '.kata_build_contract.guest_artifact_variant')"
+  slug="${repository#https://github.com/}"
+  [[ "$slug" != "$repository" && "$slug" == */* && "$slug" != */*/* ]] ||
+    die "guest-components repository cannot be mapped to its GHCR package"
+  reference="ghcr.io/${slug,,}/coco-extension:${revision}-${variant}-amd64"
+  docker buildx imagetools inspect "$reference" >/dev/null 2>&1 ||
+    die "required guest-components artifact is not anonymously readable: $reference"
+  printf 'guest-components artifact available: %s\n' "$reference"
+}
+
 remove_tree() {
   local task_tree=$1
   local scratch_root=${CODEWIRE_CONFIDENTIAL_STORAGE_SCRATCH_ROOT:-$default_scratch_root}
@@ -473,6 +487,7 @@ case "$command" in
     fi
     python3 "$materials_tool" --lock "$lock_file" prepare-kata \
       --repo "$source_repo" --output "$work_dir/kata-prepared"
+    verify_guest_components_artifact
     local_build="$work_dir/kata-prepared/tools/packaging/kata-deploy/local-build"
     parallel_targets="${kata_parallel_targets[*]}"
     serial_targets="${kata_serial_targets[*]}"
@@ -521,6 +536,7 @@ case "$command" in
     fi
     python3 "$materials_tool" --lock "$lock_file" prepare-kata \
       --repo "$source_repo" --output "$work_dir/kata-prepared"
+    verify_guest_components_artifact
     local_build="$work_dir/kata-prepared/tools/packaging/kata-deploy/local-build"
     STATIC_RUNTIME=yes USE_CACHE=no PUSH_TO_REGISTRY=no RELEASE=yes \
       make -C "$local_build" -f "$local_build/Makefile" all \

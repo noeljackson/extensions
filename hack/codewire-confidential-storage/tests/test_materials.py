@@ -736,6 +736,17 @@ agent_name = "kata"
         )
         self.assertIn("kata-guest-components)", recipe)
         self.assertIn("BASE_TARBALLS=coco-guest-components-tarball", recipe)
+        self.assertIn("verify_guest_components_artifact()", recipe)
+        self.assertEqual(recipe.count("    verify_guest_components_artifact\n"), 2)
+        self.assertIn('docker buildx imagetools inspect "$reference"', recipe)
+        self.assertIn(
+            "required guest-components artifact is not anonymously readable",
+            recipe,
+        )
+        self.assertLess(
+            recipe.index("    verify_guest_components_artifact\n"),
+            recipe.index('BASE_TARBALLS="$parallel_targets"'),
+        )
         self.assertIn(
             'built_tarball="$local_build/build/kata-static-coco-guest-components.tar.zst"',
             recipe,
