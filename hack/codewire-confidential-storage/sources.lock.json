@@ -3,7 +3,7 @@
   "platforms": [
     "linux/amd64"
   ],
-  "source_date_epoch": 1787873528,
+  "source_date_epoch": 1787884684,
   "sources": {
     "extensions": {
       "repository": "https://github.com/noeljackson/extensions",
@@ -29,13 +29,13 @@
     },
     "kata_containers": {
       "repository": "https://github.com/noeljackson/kata-containers",
-      "revision": "2a39b90a05eaae3fd3990416b3b9b3e1a8712b0c",
-      "tree": "3ad6c09ce2fbd462ba7715083cf7276a04368682",
-      "source_date_epoch": 1787807554,
+      "revision": "d62a0a44090f304a6daa103972d48579f27729df",
+      "tree": "36950daf7489cf0b80f2f5be42d4ff20ba1661fb",
+      "source_date_epoch": 1787884684,
       "archive": {
-        "url": "https://codeload.github.com/noeljackson/kata-containers/tar.gz/2a39b90a05eaae3fd3990416b3b9b3e1a8712b0c",
-        "sha256": "efe8a9edea345d2c63d3f0c5fd4dafb8d17666660ae21ed52258c942240d613e",
-        "sha512": "cceed0436ea437c31f81cd672e90a06d6f04b33787a3815402d1f51788a85910408e4c85288502c00e3420880b9ac8b5a641f925dcc74868373cecbb743c6277"
+        "url": "https://codeload.github.com/noeljackson/kata-containers/tar.gz/d62a0a44090f304a6daa103972d48579f27729df",
+        "sha256": "4c6e3cbe7d689362148a70af4fda23174771bf60fadc3d51ff79e206e83e7619",
+        "sha512": "f989af33ea13f4a4920877b3e07199cb73ab653d4808e41cb8b746e56493aa3a5fd2171735c0f47c978625ab4dd80efc6918b28220c25f7b1d1c91ec9aa082d5"
       }
     },
     "longhorn_manager": {
@@ -100,7 +100,9 @@
     "create_container_timeout_seconds": 1350,
     "input_files": {
       "ci/install_libseccomp.sh": "3e0ffc7f8a78b3bb787397abd119a558ff4e3e1ea74383ed3147953ff875b6b4",
+      "src/runtime-rs/crates/resource/src/volume/direct_volume.rs": "4ea84131bff5f21defce7924a0609308dc31644ece2ffa0b4fb45bdada5ba7ba",
       "src/runtime-rs/crates/resource/src/volume/direct_volumes/rawblock_volume.rs": "97cd4acba3fc9f57594006dbdc15d3f66ed0550b760dd9994ebd45989889f6c6",
+      "src/runtime-rs/crates/resource/src/volume/mod.rs": "4b9629b51a705e1e8b51593502a428df52c88c0823a2e3498187cec8fb380c77",
       "src/runtime-rs/crates/runtimes/common/src/types/trans_from_shim.rs": "7337e1d98110b6670f1a8a7615f6313df92a7b461ca87b50609deaa5c438c783",
       "tools/osbuilder/rootfs-builder/rootfs.sh": "78931320f2fd49918aa0dbb3b7ad744dd0b9c935688222b9ffe7178671f3f32b",
       "tools/osbuilder/rootfs-builder/ubuntu/config.sh": "0f40cd9ee3b6bcf4b456c2bd252df54891e96cee81b9b2066948f2fddfd783ea",
