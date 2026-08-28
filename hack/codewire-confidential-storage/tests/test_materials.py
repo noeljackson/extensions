@@ -37,12 +37,8 @@ class MaterialTests(unittest.TestCase):
                 "eb6c08d15226744d3ab695b389b7f525a8bd0369",
             ),
             "kata_containers": (
-                "d62a0a44090f304a6daa103972d48579f27729df",
-                "36950daf7489cf0b80f2f5be42d4ff20ba1661fb",
-            ),
-            "longhorn_manager": (
-                "a919df62323df38e290ef491f2e685be94a488f9",
-                "ae91db05b156c8f657c66aac4b3cbda9dde1c308",
+                "d53a68bac2442102037dd205f246d74c056908a3",
+                "775395dcbf5413e9b98ae256a18c49aaccc15495",
             ),
             "trustee": (
                 "258ea4acb7b9bd865fce5c63a539f2120dba8298",
@@ -133,12 +129,6 @@ class MaterialTests(unittest.TestCase):
         changed = copy.deepcopy(self.lock)
         changed["talos_extensions"]["installer_profile"] = "all-nodes"
         with self.assertRaisesRegex(materials.MaterialError, "Server.net"):
-            materials.validate_lock(changed)
-        changed = copy.deepcopy(self.lock)
-        changed["base_images"]["longhorn_manager_runtime"] = (
-            "docker.io/longhornio/longhorn-manager:v1.12.0"
-        )
-        with self.assertRaisesRegex(materials.MaterialError, "exact Docker Hub digest"):
             materials.validate_lock(changed)
         changed = copy.deepcopy(self.lock)
         changed["base_images"]["buildkit_sbom_scanner"] = (
@@ -336,71 +326,6 @@ class MaterialTests(unittest.TestCase):
                     "test binding",
                 )
 
-    def test_prepare_longhorn_keeps_accepted_git_identity(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            source = root / "source"
-            self._init_repo(source)
-            files = {
-                "scripts/version": (
-                    "#!/bin/bash\n"
-                    'GITCOMMIT="$(git rev-parse HEAD)"\n'
-                    "BUILDDATE=$(date -u --rfc-3339=seconds)\n"
-                ),
-                "package/Dockerfile": (
-                    "FROM scratch AS builder\n"
-                    "ARG LONGHORN_TWO_MINOR_UPGRADE_DISTROS\n"
-                    "ENV LONGHORN_TWO_MINOR_UPGRADE_DISTROS=${LONGHORN_TWO_MINOR_UPGRADE_DISTROS}\n"
-                    "FROM registry.suse.com/bci/bci-base:15.7@sha256:c2b0859ac7ceaf22c2d75a05c931dd7976dc0ac75e1a3a5f3c14380fcc3fb029 AS release\n"
-                    "RUN zypper -n ref && \\\n"
-                    "    zypper update -y\n\n"
-                    "RUN zypper -n install \\\n"
-                    "    iputils \\\n"
-                    "    iproute2 \\\n"
-                    "    nfs-client \\\n"
-                    "    cifs-utils \\\n"
-                    "    bind-utils \\\n"
-                    "    e2fsprogs \\\n"
-                    "    xfsprogs \\\n"
-                    "    zip \\\n"
-                    "    unzip \\\n"
-                    "    kmod \\\n"
-                    "    smartmontools \\\n"
-                    "    && zypper clean --all\n\n"
-                ),
-                "package/nsmounter": "#!/bin/sh\nexit 0\n",
-            }
-            for relative, content in files.items():
-                path = source / relative
-                path.parent.mkdir(parents=True, exist_ok=True)
-                path.write_text(content, encoding="utf-8")
-            self._commit_all(source)
-
-            lock = copy.deepcopy(self.lock)
-            self._bind_test_repo(lock, "longhorn_manager", source)
-            lock["longhorn_build_contract"]["input_files"] = {
-                relative: hashlib.sha256(content.encode()).hexdigest()
-                for relative, content in files.items()
-            }
-            lock_path = root / "lock.json"
-            self._write_lock(lock_path, lock)
-            output = root / "prepared"
-            materials.prepare_longhorn(lock_path, lock, source, output)
-            materials.verify_prepared_longhorn(lock, output)
-            self.assertIn("SOURCE_DATE_EPOCH", (output / "scripts/version").read_text())
-            prepared_dockerfile = (output / "package/Dockerfile").read_text()
-            self.assertIn(
-                lock["base_images"]["longhorn_manager_runtime"], prepared_dockerfile
-            )
-            self.assertNotIn("zypper", prepared_dockerfile)
-            self.assertEqual(
-                self._git(output, "rev-parse", "HEAD"),
-                lock["sources"]["longhorn_manager"]["revision"],
-            )
-            self.assertEqual(
-                self._git(output, "status", "--porcelain", "--untracked-files=no"), ""
-            )
-
     def test_material_receipts_are_deterministic_and_non_secret(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -420,19 +345,19 @@ class MaterialTests(unittest.TestCase):
                 )
                 text = (first / name).read_text(encoding="utf-8")
                 self.assertNotRegex(text.lower(), r"password|private_key|admin_token")
-                self.assertIn("d62a0a44090f304a6daa103972d48579f27729df", text)
+                self.assertIn("d53a68bac2442102037dd205f246d74c056908a3", text)
 
     def test_oci_subject_uses_platform_manifest_and_checks_attestations(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             archive, image_digest = self._write_oci_archive(root / "valid")
             subject = materials.verify_oci_image(
-                LOCK_PATH, self.lock, "longhorn-manager", archive
+                LOCK_PATH, self.lock, "kata-extension", archive
             )
             self.assertEqual(
                 subject,
                 {
-                    "name": "longhorn-manager@linux-amd64",
+                    "name": "kata-extension@linux-amd64",
                     "digest": {"sha256": image_digest},
                 },
             )
@@ -442,18 +367,7 @@ class MaterialTests(unittest.TestCase):
             )
             with self.assertRaisesRegex(materials.MaterialError, "exact source lock"):
                 materials.verify_oci_image(
-                    LOCK_PATH, self.lock, "longhorn-manager", invalid
-                )
-
-            invalid_source, _ = self._write_oci_archive(
-                root / "invalid-source",
-                source_label="https://sources.suse.com/not-codewire",
-            )
-            with self.assertRaisesRegex(
-                materials.MaterialError, "org.opencontainers.image.source"
-            ):
-                materials.verify_oci_image(
-                    LOCK_PATH, self.lock, "longhorn-manager", invalid_source
+                    LOCK_PATH, self.lock, "kata-extension", invalid
                 )
 
             invalid_attestation, _ = self._write_oci_archive(
@@ -464,7 +378,7 @@ class MaterialTests(unittest.TestCase):
                 materials.verify_oci_image(
                     LOCK_PATH,
                     self.lock,
-                    "longhorn-manager",
+                    "kata-extension",
                     invalid_attestation,
                 )
 
@@ -719,12 +633,8 @@ agent_name = "kata"
         self.assertNotIn("GITHUB_TOKEN", recipe)
         self.assertNotIn("--sbom=true", recipe)
         self.assertIn(".base_images.buildkit_sbom_scanner", recipe)
-        self.assertEqual(recipe.count("type=sbom,generator=$(lock_value"), 2)
-        self.assertIn(
-            '--label "org.opencontainers.image.source=$(lock_value '
-            "'.sources.longhorn_manager.repository')\"",
-            recipe,
-        )
+        self.assertEqual(recipe.count("type=sbom,generator=$(lock_value"), 1)
+        self.assertNotIn("longhorn", recipe.lower())
         self.assertIn('mode:"no-push"', recipe)
         self.assertNotIn("docker export", recipe)
         self.assertNotIn("docker create", recipe)
@@ -831,8 +741,7 @@ agent_name = "kata"
         self,
         root: Path,
         source_lock_label: str | None = None,
-        source_label: str | None = None,
-        component: str = "longhorn-manager",
+        component: str = "kata-extension",
         layer_entries: dict[str, bytes | None] | None = None,
         slsa_predicate: str = "https://slsa.dev/provenance/v1",
     ) -> tuple[Path, str]:
@@ -849,58 +758,47 @@ agent_name = "kata"
             data = json.dumps(value, sort_keys=True, separators=(",", ":")).encode()
             return write_blob_bytes(data)
 
-        if component == "kata-extension":
-            layer_buffer = io.BytesIO()
-            with tarfile.open(fileobj=layer_buffer, mode="w") as layer:
-                for name, data in sorted(
-                    (layer_entries or self._kata_extension_entries()).items()
-                ):
-                    member = tarfile.TarInfo(name)
-                    if data is None:
-                        member.type = tarfile.DIRTYPE
-                        member.mode = 0o755
-                        layer.addfile(member)
-                    else:
-                        member.size = len(data)
-                        member.mode = (
-                            0o755
-                            if name
-                            == "rootfs/usr/local/bin/containerd-shim-kata-v2"
-                            else 0o644
-                        )
-                        layer.addfile(member, io.BytesIO(data))
-            layer_digest, layer_size = write_blob_bytes(layer_buffer.getvalue())
-            image_layers = [
-                {
-                    "mediaType": "application/vnd.oci.image.layer.v1.tar",
-                    "digest": f"sha256:{layer_digest}",
-                    "size": layer_size,
-                }
-            ]
-            labels = {
-                "io.codewire.source-lock.sha256": source_lock_label
-                or materials.lock_digest(LOCK_PATH),
-                "io.codewire.source.extensions": self.lock["sources"]["extensions"][
-                    "revision"
-                ],
-                "io.codewire.source.guest-components": self.lock["sources"][
-                    "guest_components"
-                ]["revision"],
-                "io.codewire.source.kata-containers": self.lock["sources"][
-                    "kata_containers"
-                ]["revision"],
+        if component != "kata-extension":
+            raise AssertionError(f"unsupported test component: {component}")
+        layer_buffer = io.BytesIO()
+        with tarfile.open(fileobj=layer_buffer, mode="w") as layer:
+            for name, data in sorted(
+                (layer_entries or self._kata_extension_entries()).items()
+            ):
+                member = tarfile.TarInfo(name)
+                if data is None:
+                    member.type = tarfile.DIRTYPE
+                    member.mode = 0o755
+                    layer.addfile(member)
+                else:
+                    member.size = len(data)
+                    member.mode = (
+                        0o755
+                        if name == "rootfs/usr/local/bin/containerd-shim-kata-v2"
+                        else 0o644
+                    )
+                    layer.addfile(member, io.BytesIO(data))
+        layer_digest, layer_size = write_blob_bytes(layer_buffer.getvalue())
+        image_layers = [
+            {
+                "mediaType": "application/vnd.oci.image.layer.v1.tar",
+                "digest": f"sha256:{layer_digest}",
+                "size": layer_size,
             }
-        else:
-            image_layers = []
-            labels = {
-                "io.codewire.source-lock.sha256": source_lock_label
-                or materials.lock_digest(LOCK_PATH),
-                "org.opencontainers.image.revision": self.lock["sources"][
-                    "longhorn_manager"
-                ]["revision"],
-                "org.opencontainers.image.source": source_label
-                or self.lock["sources"]["longhorn_manager"]["repository"],
-            }
+        ]
+        labels = {
+            "io.codewire.source-lock.sha256": source_lock_label
+            or materials.lock_digest(LOCK_PATH),
+            "io.codewire.source.extensions": self.lock["sources"]["extensions"][
+                "revision"
+            ],
+            "io.codewire.source.guest-components": self.lock["sources"][
+                "guest_components"
+            ]["revision"],
+            "io.codewire.source.kata-containers": self.lock["sources"][
+                "kata_containers"
+            ]["revision"],
+        }
 
         config_digest, config_size = write_blob(
             {

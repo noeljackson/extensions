@@ -26,7 +26,6 @@ SOURCE_NAMES = {
     "extensions",
     "guest_components",
     "kata_containers",
-    "longhorn_manager",
     "trustee",
 }
 TRUSTEE_IMAGE_NAMES = {"attestation_service", "kbs", "rvps"}
@@ -153,7 +152,6 @@ def validate_lock(lock: dict[str, Any]) -> None:
             "trustee_images",
             "talos_extensions",
             "kata_build_contract",
-            "longhorn_build_contract",
         },
         "source lock",
     )
@@ -183,7 +181,6 @@ def validate_lock(lock: dict[str, Any]) -> None:
         {
             "buildkit_sbom_scanner",
             "kata_talos_extension",
-            "longhorn_manager_runtime",
         },
         "base_images",
     )
@@ -197,14 +194,6 @@ def validate_lock(lock: dict[str, Any]) -> None:
         base_images["kata_talos_extension"],
     ):
         raise MaterialError("Kata Talos base image must be its exact GHCR digest")
-    if not re.fullmatch(
-        r"docker\.io/longhornio/longhorn-manager@sha256:[0-9a-f]{64}",
-        base_images["longhorn_manager_runtime"],
-    ):
-        raise MaterialError(
-            "Longhorn runtime base image must be its exact Docker Hub digest"
-        )
-
     trustee_images = lock["trustee_images"]
     if (
         not isinstance(trustee_images, dict)
@@ -312,13 +301,6 @@ def validate_lock(lock: dict[str, Any]) -> None:
             raise MaterialError(
                 f"guest tool {name} must have two absolute path candidates"
             )
-
-    longhorn = lock["longhorn_build_contract"]
-    if not isinstance(longhorn, dict):
-        raise MaterialError("longhorn_build_contract must be an object")
-    require_keys(longhorn, {"input_files"}, "longhorn_build_contract")
-    validate_input_files(longhorn["input_files"], "longhorn_build_contract")
-
 
 def validate_input_files(value: Any, context: str) -> None:
     if not isinstance(value, dict) or not value:
@@ -624,95 +606,6 @@ def verify_prepared_kata(lock: dict[str, Any], repo: Path) -> None:
     if 'oras resolve --platform "linux/${go_arch}" "${disk_image_ref}"' in packaging:
         raise MaterialError(
             "prepared Kata source asks ORAS to infer a platform from an artifact config"
-        )
-
-
-def prepare_longhorn(
-    lock_path: Path, lock: dict[str, Any], repo: Path, output: Path
-) -> Path:
-    clone_exact(lock, "longhorn_manager", repo, output)
-    contract = lock["longhorn_build_contract"]
-    verify_file_contract(output, contract["input_files"], "Longhorn build contract")
-    dockerfile = output / "package/Dockerfile"
-    runtime_base = lock["base_images"]["longhorn_manager_runtime"]
-    patches = [
-        replace_once(
-            output / "scripts/version",
-            "BUILDDATE=$(date -u --rfc-3339=seconds)",
-            ': "${SOURCE_DATE_EPOCH:?SOURCE_DATE_EPOCH is required}"\n'
-            'BUILDDATE=$(date -u --date="@${SOURCE_DATE_EPOCH}" --rfc-3339=seconds)',
-            "derive the embedded build date from SOURCE_DATE_EPOCH",
-        ),
-        replace_once(
-            dockerfile,
-            "ARG LONGHORN_TWO_MINOR_UPGRADE_DISTROS\nENV LONGHORN_TWO_MINOR_UPGRADE_DISTROS=${LONGHORN_TWO_MINOR_UPGRADE_DISTROS}",
-            "ARG LONGHORN_TWO_MINOR_UPGRADE_DISTROS\n"
-            "ARG SOURCE_DATE_EPOCH\n\n"
-            "ENV LONGHORN_TWO_MINOR_UPGRADE_DISTROS=${LONGHORN_TWO_MINOR_UPGRADE_DISTROS}\n"
-            "ENV SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH}",
-            "pass SOURCE_DATE_EPOCH into the deterministic builder",
-        ),
-        replace_once(
-            dockerfile,
-            "FROM registry.suse.com/bci/bci-base:15.7@sha256:c2b0859ac7ceaf22c2d75a05c931dd7976dc0ac75e1a3a5f3c14380fcc3fb029 AS release",
-            f"FROM {runtime_base} AS release",
-            "bind the immutable official v1.12.0 runtime package closure",
-        ),
-        replace_once(
-            dockerfile,
-            "RUN zypper -n ref && \\\n    zypper update -y\n\n",
-            "",
-            "remove the mutable runtime package-update step",
-        ),
-        replace_once(
-            dockerfile,
-            "RUN zypper -n install \\\n"
-            "    iputils \\\n"
-            "    iproute2 \\\n"
-            "    nfs-client \\\n"
-            "    cifs-utils \\\n"
-            "    bind-utils \\\n"
-            "    e2fsprogs \\\n"
-            "    xfsprogs \\\n"
-            "    zip \\\n"
-            "    unzip \\\n"
-            "    kmod \\\n"
-            "    smartmontools \\\n"
-            "    && zypper clean --all\n\n",
-            "",
-            "remove the mutable runtime package-install step",
-        ),
-    ]
-    verify_prepared_longhorn(lock, output)
-    run_git(
-        output,
-        "update-index",
-        "--assume-unchanged",
-        "scripts/version",
-        "package/Dockerfile",
-    )
-    if run_git(output, "status", "--porcelain", "--untracked-files=no"):
-        raise MaterialError(
-            "prepared Longhorn source has unexpected tracked modifications"
-        )
-    receipt_path = output.parent / f"{output.name}-materials.json"
-    write_json(
-        receipt_path, prepared_receipt(lock_path, lock, "longhorn_manager", patches)
-    )
-    return receipt_path
-
-
-def verify_prepared_longhorn(lock: dict[str, Any], repo: Path) -> None:
-    version = (repo / "scripts/version").read_text(encoding="utf-8")
-    if version.count("SOURCE_DATE_EPOCH is required") != 1:
-        raise MaterialError("prepared Longhorn source lacks the fixed build epoch")
-    dockerfile = (repo / "package/Dockerfile").read_text(encoding="utf-8")
-    runtime_base = lock["base_images"]["longhorn_manager_runtime"]
-    if dockerfile.count(f"FROM {runtime_base} AS release") != 1:
-        raise MaterialError("prepared Longhorn source lacks the locked runtime base")
-    if "zypper" in dockerfile:
-        raise MaterialError(
-            "prepared Longhorn release stage still uses mutable packages"
         )
 
 
@@ -1183,7 +1076,7 @@ def verify_kata_extension_layer(data: bytes) -> None:
 def verify_oci_image(
     lock_path: Path, lock: dict[str, Any], component: str, archive: Path
 ) -> dict[str, Any]:
-    if component not in {"kata-extension", "longhorn-manager"}:
+    if component != "kata-extension":
         raise MaterialError(f"unsupported OCI component: {component}")
     if not archive.is_file():
         raise MaterialError(f"OCI archive does not exist: {archive}")
@@ -1341,27 +1234,17 @@ def verify_oci_image(
         if labels.get("io.codewire.source-lock.sha256") != lock_digest(lock_path):
             raise MaterialError("OCI image label does not bind the exact source lock")
 
-        if component == "longhorn-manager":
-            expected_labels = {
-                "org.opencontainers.image.revision": lock["sources"][
-                    "longhorn_manager"
-                ]["revision"],
-                "org.opencontainers.image.source": lock["sources"]["longhorn_manager"][
-                    "repository"
-                ],
-            }
-        else:
-            expected_labels = {
-                "io.codewire.source.extensions": lock["sources"]["extensions"][
-                    "revision"
-                ],
-                "io.codewire.source.guest-components": lock["sources"][
-                    "guest_components"
-                ]["revision"],
-                "io.codewire.source.kata-containers": lock["sources"][
-                    "kata_containers"
-                ]["revision"],
-            }
+        expected_labels = {
+            "io.codewire.source.extensions": lock["sources"]["extensions"][
+                "revision"
+            ],
+            "io.codewire.source.guest-components": lock["sources"][
+                "guest_components"
+            ]["revision"],
+            "io.codewire.source.kata-containers": lock["sources"][
+                "kata_containers"
+            ]["revision"],
+        }
         for name, expected in expected_labels.items():
             if labels.get(name) != expected:
                 raise MaterialError(f"OCI image label {name} differs from the lock")
@@ -1404,10 +1287,8 @@ def parse_artifact(value: str) -> tuple[str, Path]:
 
 def parse_oci_artifact(value: str) -> tuple[str, Path]:
     component, path = parse_artifact(value)
-    if component not in {"kata-extension", "longhorn-manager"}:
-        raise argparse.ArgumentTypeError(
-            "OCI artifact component must be kata-extension or longhorn-manager"
-        )
+    if component != "kata-extension":
+        raise argparse.ArgumentTypeError("OCI artifact component must be kata-extension")
     return component, path
 
 
@@ -1437,10 +1318,6 @@ def build_parser() -> argparse.ArgumentParser:
 
     verify_extension_parser = subparsers.add_parser("verify-extension-tree")
     verify_extension_parser.add_argument("--root", required=True, type=Path)
-
-    prepare_longhorn_parser = subparsers.add_parser("prepare-longhorn")
-    prepare_longhorn_parser.add_argument("--repo", required=True, type=Path)
-    prepare_longhorn_parser.add_argument("--output", required=True, type=Path)
 
     emit = subparsers.add_parser("emit")
     emit.add_argument("--output-dir", required=True, type=Path)
@@ -1472,9 +1349,6 @@ def main() -> int:
         elif args.command == "verify-extension-tree":
             verify_talos_extension_tree(args.root)
             print("Talos extension tree contains only manifest.yaml and rootfs")
-        elif args.command == "prepare-longhorn":
-            receipt = prepare_longhorn(args.lock, lock, args.repo, args.output)
-            print(receipt)
         elif args.command == "emit":
             emit_materials(
                 args.lock,

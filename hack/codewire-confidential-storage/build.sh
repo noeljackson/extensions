@@ -12,7 +12,7 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 default_scratch_root="${script_dir}/_out/scratch"
 lock_file="${script_dir}/sources.lock.json"
 materials_tool="${script_dir}/materials.py"
-source_names=(extensions guest_components kata_containers longhorn_manager trustee)
+source_names=(extensions guest_components kata_containers trustee)
 kata_parallel_targets=(
   agent-tarball
   pause-image-tarball
@@ -63,9 +63,6 @@ Commands:
       Prove the confidential image contains the required block-encryption/ext4 tools.
   kata-extension KATA_TARBALL OUTPUT_DIRECTORY
       Produce an attested amd64 OCI archive; never pushes.
-  longhorn-image OUTPUT_DIRECTORY [LONGHORN_REPOSITORY]
-      Produce an attested amd64 OCI archive from the exact Longhorn source; never pushes.
-
 Image publication is intentionally absent. OP-1 must use a separately reviewed wrapper
 that preserves these exact inputs and records the resulting registry digests.
 EOF
@@ -112,19 +109,8 @@ remove_tree() {
   task_parent="$(cd "$(dirname "$task_tree")" && pwd -P)"
   task_name="$(basename "$task_tree")"
   if [[ "$task_parent" == "$scratch_root" && "$task_name" == codewire-confidential-storage.* ]]; then
-    if ! find "$task_tree" -depth -delete 2>/dev/null; then
-      if command -v docker >/dev/null 2>&1; then
-        cleanup_image="$(lock_value '.base_images.longhorn_manager_runtime')"
-        docker run --rm \
-          --mount "type=bind,src=${task_tree},dst=/task" \
-          --entrypoint /bin/sh \
-          "$cleanup_image" \
-          -c 'find /task -mindepth 1 -depth -delete' >/dev/null
-        find "$task_tree" -depth -delete
-      else
-        printf 'warning: root-owned scratch remains at %s\n' "$task_tree" >&2
-      fi
-    fi
+    find "$task_tree" -depth -delete 2>/dev/null ||
+      printf 'warning: root-owned scratch remains at %s\n' "$task_tree" >&2
   fi
 }
 
@@ -458,10 +444,9 @@ case "$command" in
       --arg platform "$(lock_value '.platforms[0]')" \
       --arg guest "$(lock_value '.sources.guest_components.revision')" \
       --arg kata "$(lock_value '.sources.kata_containers.revision')" \
-      --arg longhorn "$(lock_value '.sources.longhorn_manager.revision')" \
       --arg trustee "$(lock_value '.sources.trustee.revision')" \
       --arg source_lock "$(lock_sha256)" \
-      '{schema:"codewire.confidential-storage.build-plan/v1", mode:"no-push", platform:$platform, runtime_abi:"static", source_lock_sha256:$source_lock, sources:{guest_components:$guest,kata_containers:$kata,longhorn_manager:$longhorn,trustee:$trustee}, outputs:["kata-static.tar.zst","kata-extension.oci.tar","longhorn-manager.oci.tar","materials.spdx.json","provenance.in-toto.json"]}'
+      '{schema:"codewire.confidential-storage.build-plan/v1", mode:"no-push", platform:$platform, runtime_abi:"static", source_lock_sha256:$source_lock, sources:{guest_components:$guest,kata_containers:$kata,trustee:$trustee}, outputs:["kata-static.tar.zst","kata-extension.oci.tar","materials.spdx.json","provenance.in-toto.json"]}'
     ;;
 
   prepare-kata)
@@ -603,43 +588,6 @@ case "$command" in
     python3 "$materials_tool" --lock "$lock_file" emit \
       --output-dir "$output_dir/materials" \
       --oci-artifact "kata-extension=$output_dir/kata-extension.oci.tar"
-    ;;
-
-  longhorn-image)
-    [[ $# -eq 2 || $# -eq 3 ]] || die "longhorn-image requires OUTPUT_DIRECTORY [LONGHORN_REPOSITORY]"
-    require_command docker
-    require_command git
-    require_command jq
-    require_command python3
-    output_dir=$2
-    mkdir -p "$output_dir"
-    work_dir="$(new_work_dir)"
-    trap 'cleanup_or_retain_work_dir "${work_dir:-}"' EXIT
-    source_repo=${3:-}
-    if [[ -z "$source_repo" ]]; then
-      checkout_locked_source longhorn_manager "$work_dir/longhorn-source"
-      source_repo="$work_dir/longhorn-source"
-    else
-      python3 "$materials_tool" --lock "$lock_file" verify-git --source longhorn_manager --repo "$source_repo"
-    fi
-    python3 "$materials_tool" --lock "$lock_file" prepare-longhorn \
-      --repo "$source_repo" --output "$work_dir/longhorn-prepared"
-    docker buildx build \
-      --file "$work_dir/longhorn-prepared/package/Dockerfile" \
-      --platform linux/amd64 \
-      --no-cache \
-      --provenance=mode=max \
-      --attest "type=sbom,generator=$(lock_value '.base_images.buildkit_sbom_scanner')" \
-      --build-arg "SOURCE_DATE_EPOCH=$(lock_value '.source_date_epoch')" \
-      --label "org.opencontainers.image.revision=$(lock_value '.sources.longhorn_manager.revision')" \
-      --label "org.opencontainers.image.source=$(lock_value '.sources.longhorn_manager.repository')" \
-      --label "io.codewire.source-lock.sha256=$(lock_sha256)" \
-      --metadata-file "$output_dir/longhorn-manager.metadata.json" \
-      --output "type=oci,dest=$output_dir/longhorn-manager.oci.tar,rewrite-timestamp=true" \
-      "$work_dir/longhorn-prepared"
-    python3 "$materials_tool" --lock "$lock_file" emit \
-      --output-dir "$output_dir/materials" \
-      --oci-artifact "longhorn-manager=$output_dir/longhorn-manager.oci.tar"
     ;;
 
   -h|--help|help)

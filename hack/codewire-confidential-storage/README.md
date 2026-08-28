@@ -5,12 +5,11 @@ single-node Dev confidential-storage milestone. `sources.lock.json` binds every
 source by full Git commit, Git tree, codeload SHA-256/SHA-512, and immutable OCI
 digest where an existing image is consumed.
 
-The lock includes the accepted guest-components, Kata, Longhorn, and Trustee
-sources; the existing Codewire Talos-extension base; the official Longhorn
-v1.12.0 amd64 manager runtime base; the BuildKit SBOM scanner; Trustee v0.21.0
-images; and the exact `iscsi-tools` and `util-linux-tools` package inputs. Every
-image is bound by
-manifest digest. The latter two packages are restricted by contract to the
+The lock includes the accepted guest-components, Kata, and Trustee sources;
+the existing Codewire Talos-extension base; the BuildKit SBOM scanner; Trustee
+v0.21.0 images; and the exact `iscsi-tools` and `util-linux-tools` package
+inputs. Every image is bound by manifest digest. The latter two packages are
+restricted by contract to the
 `servernet-confidential-storage-only` installer profile. Infra owns actually
 selecting them on that profile.
 
@@ -18,8 +17,9 @@ The `extensions` source entry binds the accepted Talos-extension base. OP-1
 must additionally record the exact merged WI-4 builder commit. Kata's upstream
 guest-image recipe resolves distribution packages while it runs, so its final
 artifact digest, SBOM, and provenance—not an assumption of future byte-for-byte
-reproduction—form the immutable publication unit. The Longhorn runtime path
-does not consult mutable operating-system repositories.
+reproduction—form the immutable publication unit. Longhorn is intentionally
+absent from this build boundary: the cluster consumes the stock CSI deployment
+and this artifact supplies only the Kata guest/runtime contract above it.
 
 `build.sh` has no registry login or push path. It can:
 
@@ -56,9 +56,6 @@ does not consult mutable operating-system repositories.
 - build the host Kata shim with the static runtime profile and reject any
   static tarball or final extension layer whose shim contains `PT_INTERP` or
   `DT_NEEDED`, preserving the Talos host ABI;
-- build the exact Longhorn manager OCI image with a deterministic embedded
-  build date, inheriting its runtime packages from the immutable official
-  v1.12.0 image instead of consulting mutable OS repositories; and
 - emit deterministic SPDX 2.3 material SBOM and SLSA/in-toto provenance JSON.
 
 Run the source-only gates:
@@ -84,8 +81,6 @@ The expensive amd64 recipe is deliberately separate from publication:
 ./hack/codewire-confidential-storage/build.sh \
   kata-extension _out/confidential-storage/kata-static.tar.zst \
   _out/confidential-storage/kata-extension
-./hack/codewire-confidential-storage/build.sh \
-  longhorn-image _out/confidential-storage/longhorn-manager
 ```
 
 When the guest-components target itself is the unresolved boundary, build only

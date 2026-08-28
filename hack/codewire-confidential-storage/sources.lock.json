@@ -3,7 +3,7 @@
   "platforms": [
     "linux/amd64"
   ],
-  "source_date_epoch": 1787884684,
+  "source_date_epoch": 1787907812,
   "sources": {
     "extensions": {
       "repository": "https://github.com/noeljackson/extensions",
@@ -29,24 +29,13 @@
     },
     "kata_containers": {
       "repository": "https://github.com/noeljackson/kata-containers",
-      "revision": "d62a0a44090f304a6daa103972d48579f27729df",
-      "tree": "36950daf7489cf0b80f2f5be42d4ff20ba1661fb",
-      "source_date_epoch": 1787884684,
+      "revision": "d53a68bac2442102037dd205f246d74c056908a3",
+      "tree": "775395dcbf5413e9b98ae256a18c49aaccc15495",
+      "source_date_epoch": 1787907812,
       "archive": {
-        "url": "https://codeload.github.com/noeljackson/kata-containers/tar.gz/d62a0a44090f304a6daa103972d48579f27729df",
-        "sha256": "4c6e3cbe7d689362148a70af4fda23174771bf60fadc3d51ff79e206e83e7619",
-        "sha512": "f989af33ea13f4a4920877b3e07199cb73ab653d4808e41cb8b746e56493aa3a5fd2171735c0f47c978625ab4dd80efc6918b28220c25f7b1d1c91ec9aa082d5"
-      }
-    },
-    "longhorn_manager": {
-      "repository": "https://github.com/noeljackson/longhorn-manager",
-      "revision": "a919df62323df38e290ef491f2e685be94a488f9",
-      "tree": "ae91db05b156c8f657c66aac4b3cbda9dde1c308",
-      "source_date_epoch": 1787807092,
-      "archive": {
-        "url": "https://codeload.github.com/noeljackson/longhorn-manager/tar.gz/a919df62323df38e290ef491f2e685be94a488f9",
-        "sha256": "2281cb43df80c946e87117a793c37a6cc40a14cf80afa866274a988464dd2a06",
-        "sha512": "a217d740a1e67bf7c33899b3c0f936d1f937c126965ba8d62a44860fd184abcd7d54b1ea116594caa284f1994141d885e532cf03bfab00cc5d6a9658f5cfdcc5"
+        "url": "https://codeload.github.com/noeljackson/kata-containers/tar.gz/d53a68bac2442102037dd205f246d74c056908a3",
+        "sha256": "76b54d293835ee54227b3deb505c5176c866f86307887e8cbf7b737b065a423b",
+        "sha512": "781eddea979d4ced4feb423bf3c805ad6eb15335ae1a35f4dcec30b820d7e949a6790df554bd628e6138755f110d9fab155a861e4ec04cdae779535e67f3cb4f"
       }
     },
     "trustee": {
@@ -63,8 +52,7 @@
   },
   "base_images": {
     "buildkit_sbom_scanner": "docker.io/docker/buildkit-syft-scanner@sha256:79e7b013cbec16bbb436f312819a49a4a57752b2270c1a9332ae1a10fcc82a68",
-    "kata_talos_extension": "ghcr.io/noeljackson/kata-containers@sha256:fe31430b386e55bed7bc88464ae3095f1e9ea467a99305db4f4e4cca4acf1d69",
-    "longhorn_manager_runtime": "docker.io/longhornio/longhorn-manager@sha256:955f1e0a636fe582cd190f5241737f0c2bfff72508d0608a747a9c37e74f9889"
+    "kata_talos_extension": "ghcr.io/noeljackson/kata-containers@sha256:fe31430b386e55bed7bc88464ae3095f1e9ea467a99305db4f4e4cca4acf1d69"
   },
   "trustee_images": {
     "attestation_service": "ghcr.io/confidential-containers/staged-images/coco-as-grpc@sha256:5319dcb609ed1d61876491bb43be1e03838f29eab7cea5673c7979892dc8015a",
@@ -100,10 +88,16 @@
     "create_container_timeout_seconds": 1350,
     "input_files": {
       "ci/install_libseccomp.sh": "3e0ffc7f8a78b3bb787397abd119a558ff4e3e1ea74383ed3147953ff875b6b4",
+      "src/libs/kata-types/src/confidential_volume.rs": "a6cfeea11dc00c2957bee0e2efdc4ea12ca9c8d905581d669fec8f3f035e9c96",
+      "src/libs/kata-types/src/lib.rs": "17febb0436af2bb679bbd475d076d5d7c3c026bdbf589294cc36139f0183c48a",
       "src/runtime-rs/crates/resource/src/volume/direct_volume.rs": "4ea84131bff5f21defce7924a0609308dc31644ece2ffa0b4fb45bdada5ba7ba",
       "src/runtime-rs/crates/resource/src/volume/direct_volumes/rawblock_volume.rs": "97cd4acba3fc9f57594006dbdc15d3f66ed0550b760dd9994ebd45989889f6c6",
       "src/runtime-rs/crates/resource/src/volume/mod.rs": "4b9629b51a705e1e8b51593502a428df52c88c0823a2e3498187cec8fb380c77",
       "src/runtime-rs/crates/runtimes/common/src/types/trans_from_shim.rs": "7337e1d98110b6670f1a8a7615f6313df92a7b461ca87b50609deaa5c438c783",
+      "src/runtime-rs/crates/runtimes/virt_container/src/container_manager/confidential_volume.rs": "3f2cdcbb9491661a5696afae10cd39e1df1ad043fc9ec49f7624be602f0ce501",
+      "src/runtime-rs/crates/runtimes/virt_container/src/container_manager/container.rs": "74a1984ef916bfefbd98d4210603fa9884124df2df8e66b96498c784a831daa9",
+      "src/runtime-rs/crates/runtimes/virt_container/src/container_manager/mod.rs": "325ac4e8f621d07df62bfde22411678e53b91e09ad163ca09bb5d6ee8ac3bc69",
+      "src/tools/genpolicy/src/policy.rs": "1097ac30d8f130bb7cd44672c275c465c80cd00e6e6b260fbcdc215a4c348b5a",
       "tools/osbuilder/rootfs-builder/rootfs.sh": "78931320f2fd49918aa0dbb3b7ad744dd0b9c935688222b9ffe7178671f3f32b",
       "tools/osbuilder/rootfs-builder/ubuntu/config.sh": "0f40cd9ee3b6bcf4b456c2bd252df54891e96cee81b9b2066948f2fddfd783ea",
       "tools/packaging/kata-deploy/local-build/Makefile": "076ac56cbbf96b21b2bb1bf9ac7ebd37b14ed42e1fd9a82784687ca10b7cc39c",
@@ -135,13 +129,6 @@
         "/sbin/resize2fs",
         "/usr/sbin/resize2fs"
       ]
-    }
-  },
-  "longhorn_build_contract": {
-    "input_files": {
-      "package/Dockerfile": "a1e94c957ff2c27d2af49b0514798daa3718218d31f766dad7d5de1b9601a763",
-      "package/nsmounter": "2413b40b9d53697ab8c5b2c0cb2d7a755acb699435171f6d15f8cb4540d14a0d",
-      "scripts/version": "e9f307b541af1aa572d070f3f4b2115bbcaa8ff9a871ebef002533d68686216f"
     }
   }
 }
