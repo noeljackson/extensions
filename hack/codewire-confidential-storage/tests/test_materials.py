@@ -33,16 +33,16 @@ class MaterialTests(unittest.TestCase):
                 "e8bd7d056bef8b8f378b966f72c1c41a0964c477",
             ),
             "guest_components": (
-                "3614615ad90fc95a9c8eb25091c299559edcc0c4",
-                "eb6c08d15226744d3ab695b389b7f525a8bd0369",
+                "01e50c10352fbb9498ffcb03f20eed04f88805cc",
+                "3706356f8930f6a9c6560e3c2cf82d285eb8b997",
             ),
             "kata_containers": (
-                "d53a68bac2442102037dd205f246d74c056908a3",
-                "775395dcbf5413e9b98ae256a18c49aaccc15495",
+                "13cd17213aa9895812e3082f637db63da5f430c4",
+                "6d804d82198359969fb07dbbcc484d688d8ed607",
             ),
             "trustee": (
-                "258ea4acb7b9bd865fce5c63a539f2120dba8298",
-                "1d4368226a1d95ff4f30d6e9c5496595632e29cf",
+                "24632a8789de9a83a9bf14066b457d249fb1de8c",
+                "36111a97ec78a24a225594f1d5b4c254953f2d93",
             ),
         }
         for name, (revision, tree) in expected.items():
@@ -52,7 +52,7 @@ class MaterialTests(unittest.TestCase):
         self.assertEqual(self.lock["platforms"], ["linux/amd64"])
         self.assertEqual(
             self.lock["kata_build_contract"]["guest_artifact_variant"],
-            "ubuntu24.04",
+            "ubuntu26.04",
         )
         self.assertEqual(
             self.lock["kata_build_contract"]["qemu_snp_overhead_memory_mib"],
@@ -94,7 +94,7 @@ class MaterialTests(unittest.TestCase):
     def test_guest_artifact_variant_is_fixed(self) -> None:
         changed = copy.deepcopy(self.lock)
         changed["kata_build_contract"]["guest_artifact_variant"] = "latest"
-        with self.assertRaisesRegex(materials.MaterialError, "Ubuntu 24.04"):
+        with self.assertRaisesRegex(materials.MaterialError, "Ubuntu 26.04"):
             materials.validate_lock(changed)
 
     def test_qemu_snp_guest_overhead_is_locked(self) -> None:
@@ -170,6 +170,7 @@ class MaterialTests(unittest.TestCase):
                     '    description: "test"\n'
                     '    url: "https://github.com/confidential-containers/guest-components/"\n'
                     '    version: "d4dce5ce62294cfa741225f7e5b4527ea276f326"\n'
+                    '    variant: "ubuntu26.04"\n'
                     '    container_image: "ghcr.io/confidential-containers/guest-components/coco-extension"\n'
                     '    extension_image: "ghcr.io/confidential-containers/guest-components/coco-extension-disk"\n'
                 ),
@@ -210,15 +211,12 @@ class MaterialTests(unittest.TestCase):
             output = root / "prepared"
             materials.prepare_kata(lock_path, lock, source, output)
             materials.verify_prepared_kata(lock, output)
+            versions = (output / "versions.yaml").read_text(encoding="utf-8")
             self.assertIn(
-                (
-                    self.lock["sources"]["guest_components"]["revision"]
-                    + "-"
-                    + self.lock["kata_build_contract"]["guest_artifact_variant"]
-                    + "-amd64"
-                ),
-                (output / "versions.yaml").read_text(encoding="utf-8"),
+                f'    version: "{self.lock["sources"]["guest_components"]["revision"]}"',
+                versions,
             )
+            self.assertIn('    variant: "ubuntu26.04"', versions)
             self.assertIn(
                 f'url: "{self.lock["sources"]["guest_components"]["repository"]}/"',
                 (output / "versions.yaml").read_text(encoding="utf-8"),
@@ -345,7 +343,7 @@ class MaterialTests(unittest.TestCase):
                 )
                 text = (first / name).read_text(encoding="utf-8")
                 self.assertNotRegex(text.lower(), r"password|private_key|admin_token")
-                self.assertIn("d53a68bac2442102037dd205f246d74c056908a3", text)
+                self.assertIn("13cd17213aa9895812e3082f637db63da5f430c4", text)
 
     def test_oci_subject_uses_platform_manifest_and_checks_attestations(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

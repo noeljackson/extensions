@@ -256,9 +256,9 @@ def validate_lock(lock: dict[str, Any]) -> None:
         },
         "kata_build_contract",
     )
-    if kata["guest_artifact_variant"] != "ubuntu24.04":
+    if kata["guest_artifact_variant"] != "ubuntu26.04":
         raise MaterialError(
-            "Kata guest artifact variant must select the fixed Ubuntu 24.04 image"
+            "Kata guest artifact variant must select the fixed Ubuntu 26.04 image"
         )
     if kata["qemu_snp_overhead_memory_mib"] != 2048:
         raise MaterialError(
@@ -485,11 +485,10 @@ def guest_component_bindings(
     registry_root = f"ghcr.io/{slug}"
     if platform != "linux/amd64":
         raise MaterialError(f"unsupported guest artifact platform: {platform!r}")
-    artifact_tag = f'{source["revision"]}-{artifact_variant}-amd64'
-
     return {
         "url": f"{repository}/",
-        "version": artifact_tag,
+        "version": source["revision"],
+        "variant": artifact_variant,
         "container_image": f"{registry_root}/coco-extension",
         "extension_image": f"{registry_root}/coco-extension-disk",
     }
