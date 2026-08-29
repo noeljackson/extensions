@@ -419,7 +419,12 @@ class MaterialTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             invalid_entries = self._kata_extension_entries()
-            invalid_entries["manifest.yaml"] = b"version: 4.0.0\n"
+            invalid_entries["manifest.yaml"] = b'''\
+version: v1alpha1
+metadata:
+  name: kata-containers
+  version: "4.0.0"
+'''
             invalid, _ = self._write_oci_archive(
                 root / "invalid",
                 component="kata-extension",
@@ -636,15 +641,22 @@ agent_name = "kata"
     def test_talos_extension_tree_has_exact_top_level_contract(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            (root / "manifest.yaml").write_text("version: 4.1.0\n")
+            valid_manifest = '''\
+version: v1alpha1
+metadata:
+  name: kata-containers
+  version: "4.1.0"
+'''
+            stale_manifest = valid_manifest.replace('"4.1.0"', '"4.0.0"')
+            (root / "manifest.yaml").write_text(valid_manifest)
             (root / "rootfs").mkdir()
             materials.verify_talos_extension_tree(root, "4.1.0")
-            (root / "manifest.yaml").write_text("version: 4.0.0\n")
+            (root / "manifest.yaml").write_text(stale_manifest)
             with self.assertRaisesRegex(
                 materials.MaterialError, "locked Kata version"
             ):
                 materials.verify_talos_extension_tree(root, "4.1.0")
-            (root / "manifest.yaml").write_text("version: 4.1.0\n")
+            (root / "manifest.yaml").write_text(valid_manifest)
             (root / ".dockerenv").touch()
             with self.assertRaisesRegex(
                 materials.MaterialError, "unexpected entries.*dockerenv"
@@ -920,7 +932,12 @@ agent_name = "kata"
 
     def _kata_extension_entries(self) -> dict[str, bytes | None]:
         return {
-            "manifest.yaml": b"version: 4.1.0\n",
+            "manifest.yaml": b'''\
+version: v1alpha1
+metadata:
+  name: kata-containers
+  version: "4.1.0"
+''',
             "rootfs": None,
             "rootfs/usr/local/bin/containerd-shim-kata-qemu-snp-v2": b"shim",
             "rootfs/usr/local/bin/containerd-shim-kata-v2": self._static_amd64_elf(),

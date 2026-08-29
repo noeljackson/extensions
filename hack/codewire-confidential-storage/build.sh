@@ -321,14 +321,30 @@ import sys
 manifest_path = pathlib.Path(sys.argv[1])
 version = sys.argv[2]
 lines = manifest_path.read_text().splitlines()
-matches = [index for index, line in enumerate(lines) if re.fullmatch(r"version:\s*.*", line)]
+if lines.count("version: v1alpha1") != 1:
+    raise SystemExit("expected the Talos v1alpha1 manifest schema")
+metadata = [index for index, line in enumerate(lines) if line == "metadata:"]
+if len(metadata) != 1:
+    raise SystemExit("expected exactly one metadata block")
+metadata_start = metadata[0]
+metadata_end = next(
+    (index for index in range(metadata_start + 1, len(lines)) if lines[index] and not lines[index].startswith(" ")),
+    len(lines),
+)
+matches = [
+    index
+    for index in range(metadata_start + 1, metadata_end)
+    if re.fullmatch(r"  version:\s*.*", lines[index])
+]
 if len(matches) != 1:
-    raise SystemExit("expected exactly one top-level extension version")
-lines[matches[0]] = f"version: {version}"
+    raise SystemExit("expected exactly one metadata version")
+lines[matches[0]] = f'  version: "{version}"'
 manifest_path.write_text("\n".join(lines) + "\n")
 PY
-  grep -Fqx "version: ${kata_version}" "$manifest" \
-    || die "Talos extension manifest does not identify the exact Kata version"
+  grep -Fqx 'version: v1alpha1' "$manifest" \
+    || die "Talos extension manifest schema changed"
+  grep -Fqx "  version: \"${kata_version}\"" "$manifest" \
+    || die "Talos extension metadata does not identify the exact Kata version"
 }
 
 overlay_confidential_payload() {

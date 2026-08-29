@@ -768,10 +768,28 @@ def verify_extension_manifest_version(data: bytes, expected_version: str) -> Non
         lines = data.decode("utf-8").splitlines()
     except UnicodeDecodeError as error:
         raise MaterialError("Kata extension manifest.yaml is not UTF-8") from error
-    version_lines = [line for line in lines if line.startswith("version:")]
-    if version_lines != [f"version: {expected_version}"]:
+    if lines.count("version: v1alpha1") != 1:
+        raise MaterialError("Kata extension manifest schema is not v1alpha1")
+    metadata = [index for index, line in enumerate(lines) if line == "metadata:"]
+    if len(metadata) != 1:
+        raise MaterialError("Kata extension manifest metadata block is invalid")
+    metadata_start = metadata[0]
+    metadata_end = next(
+        (
+            index
+            for index in range(metadata_start + 1, len(lines))
+            if lines[index] and not lines[index].startswith(" ")
+        ),
+        len(lines),
+    )
+    version_lines = [
+        line
+        for line in lines[metadata_start + 1 : metadata_end]
+        if line.startswith("  version:")
+    ]
+    if version_lines != [f'  version: "{expected_version}"']:
         raise MaterialError(
-            "Kata extension manifest version differs from the locked Kata version"
+            "Kata extension metadata version differs from the locked Kata version"
         )
 
 
