@@ -3,7 +3,7 @@
   "platforms": [
     "linux/amd64"
   ],
-  "source_date_epoch": 1788010170,
+  "source_date_epoch": 1788011786,
   "sources": {
     "extensions": {
       "repository": "https://github.com/noeljackson/extensions",
@@ -29,13 +29,13 @@
     },
     "kata_containers": {
       "repository": "https://github.com/noeljackson/kata-containers",
-      "revision": "13cd17213aa9895812e3082f637db63da5f430c4",
-      "tree": "6d804d82198359969fb07dbbcc484d688d8ed607",
-      "source_date_epoch": 1788004644,
+      "revision": "b70a8f1d1c9aaf2c4812a272fe3ec6fd9a8194d7",
+      "tree": "466e2bcf73620d1c13c978215987655246fd8980",
+      "source_date_epoch": 1788011786,
       "archive": {
-        "url": "https://codeload.github.com/noeljackson/kata-containers/tar.gz/13cd17213aa9895812e3082f637db63da5f430c4",
-        "sha256": "7ef27f7d49c1eb1cb14e819a7acea8d08be0decb5ed7f54a7f37cf529264391e",
-        "sha512": "e46211f19858078bc11ee7a096c94260193a06ae9222f6a114396b338ab35392d68425edafa1a3ba8a930943a1221a143a176a455c55a87de1ec1d2477a87555"
+        "url": "https://codeload.github.com/noeljackson/kata-containers/tar.gz/b70a8f1d1c9aaf2c4812a272fe3ec6fd9a8194d7",
+        "sha256": "7913ed468dfcd71e6329df84e7ef3520307dee108ce29aeb16b54f3f79759de8",
+        "sha512": "186c4d57eb24acd54056cb3699859dd7c3b020585d31f48673a7b750726120abe4093d14f3d200670a50e92d4f259d666f068fba98b1c80c34e7d2baa5703fab"
       }
     },
     "trustee": {
@@ -101,7 +101,7 @@
       "tools/osbuilder/rootfs-builder/rootfs.sh": "78931320f2fd49918aa0dbb3b7ad744dd0b9c935688222b9ffe7178671f3f32b",
       "tools/osbuilder/rootfs-builder/ubuntu/config.sh": "0f40cd9ee3b6bcf4b456c2bd252df54891e96cee81b9b2066948f2fddfd783ea",
       "tools/packaging/kata-deploy/local-build/Makefile": "6ce51f2b580e09d77cefd0bd17b04ffaaf9b95aae0a556ff473a512e035f3e50",
-      "tools/packaging/kata-deploy/local-build/kata-deploy-binaries.sh": "1fc91c379fb4cc823d532fbe6579c0fb192baf19a06f3a12ff534da7c4e96409",
+      "tools/packaging/kata-deploy/local-build/kata-deploy-binaries.sh": "530769186728607210b6611701202dd5bf4721390e59ebbd257c6d34c9e2822e",
       "versions.yaml": "83c381c8ec8289ed12ac5ca8749e3219a6df4361aaf069b9461243799fff11f0"
     },
     "required_packages": [
