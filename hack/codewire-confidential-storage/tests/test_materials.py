@@ -685,15 +685,16 @@ metadata:
         self.assertIn("BASE_TARBALLS=coco-guest-components-tarball", recipe)
         self.assertIn("verify_guest_components_artifact()", recipe)
         self.assertEqual(recipe.count("    verify_guest_components_artifact\n"), 2)
+        self.assertIn("for flavor in coco-extension coco-extension-disk", recipe)
         self.assertIn('docker buildx imagetools inspect "$arch_reference"', recipe)
         self.assertIn('docker buildx imagetools inspect "$variant_reference"', recipe)
         self.assertIn('[[ "$arch_digest" == "$variant_digest" ]]', recipe)
         self.assertIn(
-            "required guest-components artifact is not anonymously readable",
+            "required guest-components ${flavor} artifact is not anonymously readable",
             recipe,
         )
         self.assertIn(
-            "required guest-components variant manifest is not anonymously readable",
+            "required guest-components ${flavor} variant is not anonymously readable",
             recipe,
         )
         self.assertLess(

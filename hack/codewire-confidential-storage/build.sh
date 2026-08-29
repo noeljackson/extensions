@@ -86,26 +86,28 @@ lock_sha256() {
 }
 
 verify_guest_components_artifact() {
-  local repository revision variant slug arch_reference variant_reference arch_digest variant_digest
+  local repository revision variant slug flavor arch_reference variant_reference arch_digest variant_digest
   repository="$(lock_value '.sources.guest_components.repository')"
   revision="$(lock_value '.sources.guest_components.revision')"
   variant="$(lock_value '.kata_build_contract.guest_artifact_variant')"
   slug="${repository#https://github.com/}"
   [[ "$slug" != "$repository" && "$slug" == */* && "$slug" != */*/* ]] ||
     die "guest-components repository cannot be mapped to its GHCR package"
-  arch_reference="ghcr.io/${slug,,}/coco-extension:${revision}-${variant}-amd64"
-  variant_reference="ghcr.io/${slug,,}/coco-extension:${revision}-${variant}"
-  arch_digest="$(
-    docker buildx imagetools inspect "$arch_reference" --format '{{json .Manifest}}' 2>/dev/null |
-      jq -er '.digest // .Digest'
-  )" || die "required guest-components artifact is not anonymously readable: $arch_reference"
-  variant_digest="$(
-    docker buildx imagetools inspect "$variant_reference" --format '{{json .Manifest}}' 2>/dev/null |
-      jq -er '.digest // .Digest'
-  )" || die "required guest-components variant manifest is not anonymously readable: $variant_reference"
-  [[ "$arch_digest" == "$variant_digest" ]] ||
-    die "guest-components variant manifest does not resolve to the locked amd64 artifact"
-  printf 'guest-components artifact available: %s@%s\n' "$variant_reference" "$variant_digest"
+  for flavor in coco-extension coco-extension-disk; do
+    arch_reference="ghcr.io/${slug,,}/${flavor}:${revision}-${variant}-amd64"
+    variant_reference="ghcr.io/${slug,,}/${flavor}:${revision}-${variant}"
+    arch_digest="$(
+      docker buildx imagetools inspect "$arch_reference" --format '{{json .Manifest}}' 2>/dev/null |
+        jq -er '.digest // .Digest'
+    )" || die "required guest-components ${flavor} artifact is not anonymously readable: $arch_reference"
+    variant_digest="$(
+      docker buildx imagetools inspect "$variant_reference" --format '{{json .Manifest}}' 2>/dev/null |
+        jq -er '.digest // .Digest'
+    )" || die "required guest-components ${flavor} variant is not anonymously readable: $variant_reference"
+    [[ "$arch_digest" == "$variant_digest" ]] ||
+      die "guest-components ${flavor} variant does not resolve to the locked amd64 artifact"
+    printf 'guest-components artifact available: %s@%s\n' "$variant_reference" "$variant_digest"
+  done
 }
 
 remove_tree() {
