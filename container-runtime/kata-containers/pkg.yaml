@@ -9,8 +9,8 @@ dependencies:
   - stage: glibc
     from: /rootfs/
     to: /rootfs/usr/local/lib/containers/nydus-for-kata-tee/
-  - image: ghcr.io/noeljackson/kata-deploy-codewire@sha256:a02db0ba8179347258c7e601f3f7366cd55fa2e6bff9f5f90e67905ba5aacaf7
-    from: /opt/kata-artifacts/nydus-snapshotter
+  - image: ghcr.io/noeljackson/kata-deploy-codewire@sha256:88bfde4167ec9528d8c37684e9ca6368a781075c3cbf8c8e423047fb213d0539
+    from: /opt/nydus-snapshotter/bin
   - image: docker.io/library/golang:1.26.7-alpine3.23@sha256:b17af760035fc2f338eed92d448a6c67f2d45438844fc6c60678fa5f99e44b57
     from: /usr/local/go/
     to: /toolchain/go/
