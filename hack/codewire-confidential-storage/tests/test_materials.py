@@ -486,6 +486,49 @@ metadata:
                     LOCK_PATH, self.lock, "kata-extension", missing_helper
                 )
 
+    def test_kata_extension_rejects_mixed_host_boot_payload(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            cases = []
+
+            missing_qemu = self._kata_extension_entries()
+            del missing_qemu[
+                "rootfs/usr/local/libexec/qemu-system-x86_64-snp-experimental"
+            ]
+            cases.append(("missing-qemu", missing_qemu, "lacks required payload"))
+
+            stale_kernel = self._kata_extension_entries()
+            stale_kernel[
+                "rootfs/usr/local/share/kata-containers/vmlinuz-6.18.35-202"
+            ] = b"stale-kernel"
+            cases.append(
+                ("stale-kernel", stale_kernel, "exactly one versioned kernel")
+            )
+
+            wrong_default = self._kata_extension_entries()
+            wrong_default[
+                "rootfs/usr/local/share/kata-containers/vmlinuz.container"
+            ] = "vmlinuz-6.18.35-202"
+            cases.append(
+                (
+                    "wrong-default",
+                    wrong_default,
+                    "does not select its exact versioned kernel",
+                )
+            )
+
+            for name, entries, expected in cases:
+                with self.subTest(name=name):
+                    archive, _ = self._write_oci_archive(
+                        root / name,
+                        component="kata-extension",
+                        layer_entries=entries,
+                    )
+                    with self.assertRaisesRegex(materials.MaterialError, expected):
+                        materials.verify_oci_image(
+                            LOCK_PATH, self.lock, "kata-extension", archive
+                        )
+
     def test_kata_extension_requires_every_configured_guest_image(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -518,6 +561,10 @@ metadata:
                 "rootfs/usr/local/share/kata-containers/configuration-qemu-snp.toml"
             ] = b'''\
 [hypervisor.qemu]
+path = "/usr/local/bin/qemu-system-x86_64-snp-experimental"
+valid_hypervisor_paths = ["/usr/local/bin/qemu-system-x86_64-snp-experimental"]
+kernel = "/usr/local/share/kata-containers/vmlinuz.container"
+firmware = "/usr/local/share/ovmf/AMDSEV.fd"
 image = "/usr/local/share/kata-containers/kata-containers-confidential.img"
 kernel_verity_params = "root_hash=cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc,salt=dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd,data_blocks=2,data_block_size=4096,hash_block_size=4096"
 confidential_guest = true
@@ -718,6 +765,20 @@ metadata:
         self.assertIn("kata-containers-coco-extension.img", recipe)
         self.assertIn("root_hash_coco-extension.txt", recipe)
         self.assertIn('cmp -s "$source"', recipe)
+        self.assertIn(
+            'replace_exact_tree "$qemu_snp_libs" '
+            '"$rootfs/usr/local/lib/kata-qemu-snp-experimental"',
+            recipe,
+        )
+        self.assertIn(
+            'replace_exact_tree "$qemu_snp_data" '
+            '"$rootfs/usr/local/share/kata-qemu-snp-experimental/qemu"',
+            recipe,
+        )
+        self.assertIn("final QEMU-SNP binary differs after copying", recipe)
+        self.assertIn("final AMD SEV firmware differs after copying", recipe)
+        self.assertIn("final Kata kernel differs after copying", recipe)
+        self.assertIn("-name 'vmlinuz-*' -delete", recipe)
         self.assertIn("parsed kernel_verity_params does not match", recipe)
         self.assertNotIn(
             'find "$work_dir/context/extension" -exec touch',
@@ -793,7 +854,7 @@ metadata:
         root: Path,
         source_lock_label: str | None = None,
         component: str = "kata-extension",
-        layer_entries: dict[str, bytes | None] | None = None,
+        layer_entries: dict[str, bytes | str | None] | None = None,
         slsa_predicate: str = "https://slsa.dev/provenance/v1",
     ) -> tuple[Path, str]:
         layout = root / "layout"
@@ -821,11 +882,21 @@ metadata:
                     member.type = tarfile.DIRTYPE
                     member.mode = 0o755
                     layer.addfile(member)
+                elif isinstance(data, str):
+                    member.type = tarfile.SYMTYPE
+                    member.mode = 0o777
+                    member.linkname = data
+                    layer.addfile(member)
                 else:
                     member.size = len(data)
                     member.mode = (
                         0o755
-                        if name == "rootfs/usr/local/bin/containerd-shim-kata-v2"
+                        if name
+                        in {
+                            "rootfs/usr/local/bin/containerd-shim-kata-v2",
+                            "rootfs/usr/local/bin/qemu-system-x86_64-snp-experimental",
+                            "rootfs/usr/local/libexec/qemu-system-x86_64-snp-experimental",
+                        }
                         else 0o644
                     )
                     layer.addfile(member, io.BytesIO(data))
@@ -944,7 +1015,7 @@ metadata:
                 output.add(source, arcname=source.relative_to(layout), recursive=False)
         return archive, image_digest
 
-    def _kata_extension_entries(self) -> dict[str, bytes | None]:
+    def _kata_extension_entries(self) -> dict[str, bytes | str | None]:
         return {
             "manifest.yaml": b'''\
 version: v1alpha1
@@ -956,6 +1027,11 @@ metadata:
             "rootfs/usr/local/bin/containerd-shim-kata-qemu-snp-v2": b"shim",
             "rootfs/usr/local/bin/containerd-shim-kata-v2": self._static_amd64_elf(),
             "rootfs/usr/local/bin/kata-ctl": b"kata-ctl",
+            "rootfs/usr/local/bin/qemu-system-x86_64-snp-experimental": b"qemu-wrapper",
+            "rootfs/usr/local/libexec/qemu-system-x86_64-snp-experimental": b"qemu-binary",
+            "rootfs/usr/local/lib/kata-qemu-snp-experimental/libfdt.a": b"qemu-library",
+            "rootfs/usr/local/share/kata-qemu-snp-experimental/qemu/bios.bin": b"qemu-data",
+            "rootfs/usr/local/share/ovmf/AMDSEV.fd": b"firmware",
             "rootfs/usr/local/share/codewire/confidential-storage/materials.spdx.json": b"{}\n",
             "rootfs/usr/local/share/codewire/confidential-storage/provenance.in-toto.json": b"{}\n",
             "rootfs/usr/local/share/kata-containers/configuration.toml": b'''\
@@ -972,6 +1048,10 @@ agent_name = "kata"
 ''',
             "rootfs/usr/local/share/kata-containers/configuration-qemu-snp.toml": b'''\
 [hypervisor.qemu]
+path = "/usr/local/bin/qemu-system-x86_64-snp-experimental"
+valid_hypervisor_paths = ["/usr/local/bin/qemu-system-x86_64-snp-experimental"]
+kernel = "/usr/local/share/kata-containers/vmlinuz.container"
+firmware = "/usr/local/share/ovmf/AMDSEV.fd"
 image = "/usr/local/share/kata-containers/kata-containers-confidential.img"
 kernel_verity_params = "root_hash=cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc,salt=dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd,data_blocks=2,data_block_size=4096,hash_block_size=4096"
 confidential_guest = true
@@ -985,6 +1065,8 @@ verity_params = "root_hash=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
             "rootfs/usr/local/share/kata-containers/kata-containers-confidential.img": b"image",
             "rootfs/usr/local/share/kata-containers/kata-containers-coco-extension.img": b"coco-image",
             "rootfs/usr/local/share/kata-containers/kata-containers-initrd-confidential.img": b"initrd",
+            "rootfs/usr/local/share/kata-containers/vmlinuz-6.18.48-202": b"kernel",
+            "rootfs/usr/local/share/kata-containers/vmlinuz.container": "vmlinuz-6.18.48-202",
             "rootfs/usr/local/share/kata-containers/root_hash_coco-extension.txt": b"root_hash=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,salt=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb,data_blocks=1,data_block_size=4096,hash_block_size=4096\n",
             "rootfs/usr/local/share/kata-containers/root_hash_confidential.txt": b"root_hash=cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc,salt=dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd,data_blocks=2,data_block_size=4096,hash_block_size=4096\n",
         }
