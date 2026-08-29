@@ -1,0 +1,43 @@
+name: nydus-for-kata-tee
+depends:
+  - service: cri
+restart: always
+container:
+  environment:
+    - PATH=/usr/local/bin
+  entrypoint: /usr/local/lib/ld-linux-x86-64.so.2
+  args:
+    - --library-path
+    - /usr/local/lib
+    - /containerd-nydus-grpc
+    - --config=/config-guest-pulling.toml
+    - --log-to-stdout
+  security:
+    rootfsPropagation: shared
+  mounts:
+    - source: /var
+      destination: /var
+      type: bind
+      options:
+        - rshared
+        - rbind
+        - rw
+    - source: /run
+      destination: /run
+      type: bind
+      options:
+        - rshared
+        - rbind
+        - rw
+    - source: /etc/ssl/certs
+      destination: /etc/ssl/certs
+      type: bind
+      options:
+        - rbind
+        - ro
+    - source: /usr/local/bin
+      destination: /usr/local/bin
+      type: bind
+      options:
+        - bind
+        - ro

@@ -1,0 +1,11 @@
+version = 1
+
+root = "/var/lib/nydus-for-kata-tee"
+address = "/run/nydus-for-kata-tee/containerd-nydus-grpc.sock"
+
+[daemon]
+fs_driver = "proxy"
+
+[snapshot]
+enable_kata_volume = true
+nydus_overlayfs_path = "/usr/local/bin/nydus-overlayfs"
