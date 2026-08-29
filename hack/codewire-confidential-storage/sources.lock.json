@@ -103,7 +103,7 @@
       "tools/osbuilder/rootfs-builder/ubuntu/config.sh": "0f40cd9ee3b6bcf4b456c2bd252df54891e96cee81b9b2066948f2fddfd783ea",
       "tools/packaging/kata-deploy/local-build/Makefile": "6ce51f2b580e09d77cefd0bd17b04ffaaf9b95aae0a556ff473a512e035f3e50",
       "tools/packaging/kata-deploy/local-build/kata-deploy-binaries.sh": "530769186728607210b6611701202dd5bf4721390e59ebbd257c6d34c9e2822e",
-      "versions.yaml": "83c381c8ec8289ed12ac5ca8749e3219a6df4361aaf069b9461243799fff11f0"
+      "versions.yaml": "7f09f3595e10201b0ad666e0ab212c025571c9113dae86be167c181f760270a9"
     },
     "required_packages": [
       "cryptsetup-bin",
