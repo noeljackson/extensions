@@ -3,7 +3,7 @@
   "platforms": [
     "linux/amd64"
   ],
-  "source_date_epoch": 1788013879,
+  "source_date_epoch": 1788037997,
   "sources": {
     "extensions": {
       "repository": "https://github.com/noeljackson/extensions",
@@ -18,24 +18,24 @@
     },
     "guest_components": {
       "repository": "https://github.com/noeljackson/guest-components",
-      "revision": "8ca38472db8ac58f29f7166cadda9e8493f9fab1",
-      "tree": "6737741f51e87bfaa26f148af64cce84fa204cf0",
-      "source_date_epoch": 1788013879,
+      "revision": "83c29d8a5e2337df5607594a96e364424d012719",
+      "tree": "bb2085a736396b9912c3c34c0b5404596ddaf9d6",
+      "source_date_epoch": 1788037997,
       "archive": {
-        "url": "https://codeload.github.com/noeljackson/guest-components/tar.gz/8ca38472db8ac58f29f7166cadda9e8493f9fab1",
-        "sha256": "a9f7f06ae9859565730c6b62e4288a85c46fcc8f86a8287f8a9f39762de80a37",
-        "sha512": "2037bae2ca3e8d3c738cb2dff3a261aad6cec40ea1ebc5cd8828791f7dfb0d9bc62267a0d78832c975551dc42484a78720a384ca8ed5f94b561db5d701cb5274"
+        "url": "https://codeload.github.com/noeljackson/guest-components/tar.gz/83c29d8a5e2337df5607594a96e364424d012719",
+        "sha256": "77ee5bc2cee2fd5851ff8128d42f283a4fc93844e659efecd6e628db636129c3",
+        "sha512": "63236c07fde697c571f10b640143399eb44c8df876dd142b8ffdf08e7a7430f390d748b6887594ab5c29aeaa3e0ced60e0e205a96b4b18b865c5877fed8ffbc9"
       }
     },
     "kata_containers": {
       "repository": "https://github.com/noeljackson/kata-containers",
-      "revision": "b70a8f1d1c9aaf2c4812a272fe3ec6fd9a8194d7",
-      "tree": "466e2bcf73620d1c13c978215987655246fd8980",
-      "source_date_epoch": 1788011786,
+      "revision": "e2422815bcb6ee3d27d0e59f445232fcde2a0f12",
+      "tree": "15967057c6bad7d8fa9b1984c633ed39fcfdfb3f",
+      "source_date_epoch": 1788029624,
       "archive": {
-        "url": "https://codeload.github.com/noeljackson/kata-containers/tar.gz/b70a8f1d1c9aaf2c4812a272fe3ec6fd9a8194d7",
-        "sha256": "7913ed468dfcd71e6329df84e7ef3520307dee108ce29aeb16b54f3f79759de8",
-        "sha512": "186c4d57eb24acd54056cb3699859dd7c3b020585d31f48673a7b750726120abe4093d14f3d200670a50e92d4f259d666f068fba98b1c80c34e7d2baa5703fab"
+        "url": "https://codeload.github.com/noeljackson/kata-containers/tar.gz/e2422815bcb6ee3d27d0e59f445232fcde2a0f12",
+        "sha256": "e6c58e0dbe9d3aec1304a41ddaa6151bd986e11d9fc8508827287cc002559991",
+        "sha512": "6c67c6dbf96e8a7acb1e50dd13a0411371fa40f229a84b1e411bb25eb2386f36fbca0b9a73db3e656012a81e9ba269748e3a73b7de054f16cab916d6b9c9a5a2"
       }
     },
     "trustee": {
@@ -89,16 +89,16 @@
     "create_container_timeout_seconds": 1350,
     "input_files": {
       "ci/install_libseccomp.sh": "3e0ffc7f8a78b3bb787397abd119a558ff4e3e1ea74383ed3147953ff875b6b4",
-      "src/libs/kata-types/src/confidential_volume.rs": "a6cfeea11dc00c2957bee0e2efdc4ea12ca9c8d905581d669fec8f3f035e9c96",
+      "src/libs/kata-types/src/confidential_volume.rs": "0563d0138caf50dfe43abba7a1a990e23fb1dc0127749c1b53a49d5d64828fb9",
       "src/libs/kata-types/src/lib.rs": "cf4075e806bcc5e2780f813b0b5349995708c6b24051e5c201be396ba5053e13",
-      "src/runtime-rs/crates/resource/src/volume/direct_volume.rs": "4ea84131bff5f21defce7924a0609308dc31644ece2ffa0b4fb45bdada5ba7ba",
-      "src/runtime-rs/crates/resource/src/volume/direct_volumes/rawblock_volume.rs": "97cd4acba3fc9f57594006dbdc15d3f66ed0550b760dd9994ebd45989889f6c6",
-      "src/runtime-rs/crates/resource/src/volume/mod.rs": "4b9629b51a705e1e8b51593502a428df52c88c0823a2e3498187cec8fb380c77",
+      "src/runtime-rs/crates/resource/src/volume/direct_volume.rs": "78a63970e3e57db79884509030820d571a9abbd09d0db607168bea745cf18db9",
+      "src/runtime-rs/crates/resource/src/volume/direct_volumes/rawblock_volume.rs": "847451a5457b3015299501346a41fec9192db34136117db53bcc5aef824e4829",
+      "src/runtime-rs/crates/resource/src/volume/mod.rs": "303a4da8e51aa66c5fa66e84e9db989a2d3ba80dfe6aa73c59a6cdd3907a7cd1",
       "src/runtime-rs/crates/runtimes/common/src/types/trans_from_shim.rs": "7337e1d98110b6670f1a8a7615f6313df92a7b461ca87b50609deaa5c438c783",
-      "src/runtime-rs/crates/runtimes/virt_container/src/container_manager/confidential_volume.rs": "3f2cdcbb9491661a5696afae10cd39e1df1ad043fc9ec49f7624be602f0ce501",
+      "src/runtime-rs/crates/runtimes/virt_container/src/container_manager/confidential_volume.rs": "8d006e576eb6c61162be3a02a7873d5362c465f517830d89d7bcb7f75d5c4246",
       "src/runtime-rs/crates/runtimes/virt_container/src/container_manager/container.rs": "74a1984ef916bfefbd98d4210603fa9884124df2df8e66b96498c784a831daa9",
       "src/runtime-rs/crates/runtimes/virt_container/src/container_manager/mod.rs": "325ac4e8f621d07df62bfde22411678e53b91e09ad163ca09bb5d6ee8ac3bc69",
-      "src/tools/genpolicy/src/policy.rs": "c3a2c44457ccdbb39bb00eac21b977a2fb8a77a9470396121fcd31500ac0324a",
+      "src/tools/genpolicy/src/policy.rs": "20447ba29de07473003b226e6ba1f512006d4f92f804e1251939b1ba4f75d30b",
       "tools/osbuilder/rootfs-builder/rootfs.sh": "78931320f2fd49918aa0dbb3b7ad744dd0b9c935688222b9ffe7178671f3f32b",
       "tools/osbuilder/rootfs-builder/ubuntu/config.sh": "0f40cd9ee3b6bcf4b456c2bd252df54891e96cee81b9b2066948f2fddfd783ea",
       "tools/packaging/kata-deploy/local-build/Makefile": "6ce51f2b580e09d77cefd0bd17b04ffaaf9b95aae0a556ff473a512e035f3e50",

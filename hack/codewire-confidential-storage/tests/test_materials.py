@@ -33,12 +33,12 @@ class MaterialTests(unittest.TestCase):
                 "e8bd7d056bef8b8f378b966f72c1c41a0964c477",
             ),
             "guest_components": (
-                "8ca38472db8ac58f29f7166cadda9e8493f9fab1",
-                "6737741f51e87bfaa26f148af64cce84fa204cf0",
+                "83c29d8a5e2337df5607594a96e364424d012719",
+                "bb2085a736396b9912c3c34c0b5404596ddaf9d6",
             ),
             "kata_containers": (
-                "b70a8f1d1c9aaf2c4812a272fe3ec6fd9a8194d7",
-                "466e2bcf73620d1c13c978215987655246fd8980",
+                "e2422815bcb6ee3d27d0e59f445232fcde2a0f12",
+                "15967057c6bad7d8fa9b1984c633ed39fcfdfb3f",
             ),
             "trustee": (
                 "24632a8789de9a83a9bf14066b457d249fb1de8c",
@@ -347,7 +347,7 @@ class MaterialTests(unittest.TestCase):
                 )
                 text = (first / name).read_text(encoding="utf-8")
                 self.assertNotRegex(text.lower(), r"password|private_key|admin_token")
-                self.assertIn("b70a8f1d1c9aaf2c4812a272fe3ec6fd9a8194d7", text)
+                self.assertIn("e2422815bcb6ee3d27d0e59f445232fcde2a0f12", text)
 
     def test_oci_subject_uses_platform_manifest_and_checks_attestations(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
