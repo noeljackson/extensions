@@ -52,7 +52,7 @@
   },
   "base_images": {
     "buildkit_sbom_scanner": "docker.io/docker/buildkit-syft-scanner@sha256:79e7b013cbec16bbb436f312819a49a4a57752b2270c1a9332ae1a10fcc82a68",
-    "kata_talos_extension": "ghcr.io/noeljackson/kata-containers@sha256:fe31430b386e55bed7bc88464ae3095f1e9ea467a99305db4f4e4cca4acf1d69"
+    "kata_talos_extension": "ghcr.io/noeljackson/kata-containers@sha256:7d33ec6d77e351db730b27217fcc3409302cb6018d5ac020544ea8ca6da58467"
   },
   "trustee_images": {
     "attestation_service": "ghcr.io/confidential-containers/staged-images/coco-as-grpc@sha256:5319dcb609ed1d61876491bb43be1e03838f29eab7cea5673c7979892dc8015a",
