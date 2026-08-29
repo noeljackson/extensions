@@ -27,7 +27,8 @@ and this artifact supplies only the Kata guest/runtime contract above it.
 - prepare exact Kata source with the accepted guest-components revision;
 - derive the immutable guest-components child tag from that revision, the
   locked Ubuntu variant, and the lock's single `linux/amd64` platform, avoiding
-  a dependency on unrelated multi-architecture manifest assembly;
+  a dependency on unrelated multi-architecture manifest assembly, and require
+  the variant tag consumed by Kata to resolve to that same immutable digest;
 - add `dmsetup` beside the already required `cryptsetup-bin` and `e2fsprogs` in
   the measured guest rootfs, then prove `cryptsetup`, `dmsetup`, `mkfs.ext4`, and
   `resize2fs` exist in the resulting confidential image;
