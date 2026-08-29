@@ -82,6 +82,7 @@
   },
   "kata_build_contract": {
     "guest_artifact_variant": "ubuntu26.04",
+    "kata_version": "4.1.0",
     "qemu_snp_overhead_memory_mib": 2048,
     "persistent_volume_max_gib": 50,
     "cdh_api_timeout_seconds": 1200,

@@ -301,8 +301,36 @@ PY
 overlay_confidential_payload() {
   local static_root=$1
   local rootfs=$2
+  local manifest=$3
   local source destination confidential_verity_params qemu_snp_config expected_overhead_memory
   local cdh_api_timeout_seconds cdh_api_timeout_ms create_container_timeout_seconds
+  local kata_version expected_kata_version
+
+  source="$static_root/opt/kata/VERSION"
+  [[ -f "$source" ]] || die "exact Kata archive lacks VERSION"
+  [[ "$(grep -cve '^[[:space:]]*$' "$source")" -eq 1 ]] \
+    || die "exact Kata archive VERSION must contain one non-empty line"
+  kata_version="$(sed -n '/[^[:space:]]/ { s/[[:space:]]*$//; p; }' "$source")"
+  expected_kata_version="$(lock_value '.kata_build_contract.kata_version')"
+  [[ "$kata_version" == "$expected_kata_version" ]] \
+    || die "exact Kata archive version does not match the source lock"
+  python3 - "$manifest" "$kata_version" <<'PY' || \
+    die "failed to bind the Talos extension manifest to the exact Kata version"
+import pathlib
+import re
+import sys
+
+manifest_path = pathlib.Path(sys.argv[1])
+version = sys.argv[2]
+lines = manifest_path.read_text().splitlines()
+matches = [index for index, line in enumerate(lines) if re.fullmatch(r"version:\s*.*", line)]
+if len(matches) != 1:
+    raise SystemExit("expected exactly one top-level extension version")
+lines[matches[0]] = f"version: {version}"
+manifest_path.write_text("\n".join(lines) + "\n")
+PY
+  grep -Fqx "version: ${kata_version}" "$manifest" \
+    || die "Talos extension manifest does not identify the exact Kata version"
 
   source="$static_root/opt/kata/runtime-rs/bin/containerd-shim-kata-v2"
   has_executable_mode "$source" || die "exact Kata runtime-rs shim is missing or has no executable mode bit"
@@ -563,7 +591,10 @@ case "$command" in
     python3 "$materials_tool" --lock "$lock_file" verify-extension-tree \
       --root "$work_dir/context/extension"
     tar --zstd -xf "$kata_tarball" -C "$work_dir/static"
-    overlay_confidential_payload "$work_dir/static" "$work_dir/context/extension/rootfs"
+    overlay_confidential_payload \
+      "$work_dir/static" \
+      "$work_dir/context/extension/rootfs" \
+      "$work_dir/context/extension/manifest.yaml"
     python3 "$materials_tool" --lock "$lock_file" emit \
       --output-dir "$work_dir/context/extension/rootfs/usr/local/share/codewire/confidential-storage"
     python3 "$materials_tool" --lock "$lock_file" verify-extension-tree \

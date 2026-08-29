@@ -246,6 +246,7 @@ def validate_lock(lock: dict[str, Any]) -> None:
         kata,
         {
             "guest_artifact_variant",
+            "kata_version",
             "qemu_snp_overhead_memory_mib",
             "persistent_volume_max_gib",
             "cdh_api_timeout_seconds",
@@ -260,6 +261,10 @@ def validate_lock(lock: dict[str, Any]) -> None:
         raise MaterialError(
             "Kata guest artifact variant must select the fixed Ubuntu 26.04 image"
         )
+    if not isinstance(kata["kata_version"], str) or re.fullmatch(
+        r"[0-9]+\.[0-9]+\.[0-9]+", kata["kata_version"]
+    ) is None:
+        raise MaterialError("Kata version must be an exact semantic version")
     if kata["qemu_snp_overhead_memory_mib"] != 2048:
         raise MaterialError(
             "Kata QEMU-SNP guest overhead must remain the locked 2048 MiB budget"
@@ -758,7 +763,19 @@ def write_json(path: Path, value: Any) -> None:
     )
 
 
-def verify_talos_extension_tree(root: Path) -> None:
+def verify_extension_manifest_version(data: bytes, expected_version: str) -> None:
+    try:
+        lines = data.decode("utf-8").splitlines()
+    except UnicodeDecodeError as error:
+        raise MaterialError("Kata extension manifest.yaml is not UTF-8") from error
+    version_lines = [line for line in lines if line.startswith("version:")]
+    if version_lines != [f"version: {expected_version}"]:
+        raise MaterialError(
+            "Kata extension manifest version differs from the locked Kata version"
+        )
+
+
+def verify_talos_extension_tree(root: Path, expected_kata_version: str) -> None:
     if not root.is_dir():
         raise MaterialError(f"Talos extension tree does not exist: {root}")
     entries = {entry.name for entry in root.iterdir()}
@@ -777,6 +794,7 @@ def verify_talos_extension_tree(root: Path) -> None:
     payload = root / "rootfs"
     if manifest.is_symlink() or not manifest.is_file():
         raise MaterialError("Talos extension manifest.yaml must be a regular file")
+    verify_extension_manifest_version(manifest.read_bytes(), expected_kata_version)
     if payload.is_symlink() or not payload.is_dir():
         raise MaterialError("Talos extension rootfs must be a directory")
 
@@ -815,7 +833,7 @@ def verify_talos_runtime_elf(data: bytes) -> None:
                 raise MaterialError("Kata runtime shim contains DT_NEEDED")
 
 
-def verify_kata_extension_layer(data: bytes) -> None:
+def verify_kata_extension_layer(data: bytes, expected_kata_version: str) -> None:
     try:
         with tarfile.open(fileobj=io.BytesIO(data), mode="r:*") as layer:
             members = layer.getmembers()
@@ -853,6 +871,16 @@ def verify_kata_extension_layer(data: bytes) -> None:
     payload = by_name.get("rootfs")
     if manifest is None or not manifest.isfile():
         raise MaterialError("Kata extension manifest.yaml must be a regular file")
+    try:
+        with tarfile.open(fileobj=io.BytesIO(data), mode="r:*") as layer:
+            stream = layer.extractfile(manifest)
+            if stream is None:
+                raise MaterialError("Kata extension manifest.yaml is unreadable")
+            verify_extension_manifest_version(stream.read(), expected_kata_version)
+    except (OSError, tarfile.TarError) as error:
+        raise MaterialError(
+            f"Kata extension manifest.yaml is unreadable: {error}"
+        ) from error
     if payload is None or not payload.isdir():
         raise MaterialError("Kata extension rootfs must be a directory")
 
@@ -1213,7 +1241,9 @@ def verify_oci_image(
                 raise MaterialError(
                     f"Kata extension layer blob does not match {layer_digest}"
                 )
-            verify_kata_extension_layer(layer_data)
+            verify_kata_extension_layer(
+                layer_data, lock["kata_build_contract"]["kata_version"]
+            )
 
         config_descriptor = image_manifest.get("config")
         if not isinstance(config_descriptor, dict) or not isinstance(
@@ -1346,7 +1376,9 @@ def main() -> int:
             verify_prepared_kata(lock, args.repo)
             print("prepared Kata source matches the confidential-storage contract")
         elif args.command == "verify-extension-tree":
-            verify_talos_extension_tree(args.root)
+            verify_talos_extension_tree(
+                args.root, lock["kata_build_contract"]["kata_version"]
+            )
             print("Talos extension tree contains only manifest.yaml and rootfs")
         elif args.command == "emit":
             emit_materials(

@@ -55,6 +55,10 @@ class MaterialTests(unittest.TestCase):
             "ubuntu26.04",
         )
         self.assertEqual(
+            self.lock["kata_build_contract"]["kata_version"],
+            "4.1.0",
+        )
+        self.assertEqual(
             self.lock["kata_build_contract"]["qemu_snp_overhead_memory_mib"],
             2048,
         )
@@ -411,6 +415,23 @@ class MaterialTests(unittest.TestCase):
                     LOCK_PATH, self.lock, "kata-extension", invalid
                 )
 
+    def test_kata_extension_rejects_stale_manifest_version(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            invalid_entries = self._kata_extension_entries()
+            invalid_entries["manifest.yaml"] = b"version: 4.0.0\n"
+            invalid, _ = self._write_oci_archive(
+                root / "invalid",
+                component="kata-extension",
+                layer_entries=invalid_entries,
+            )
+            with self.assertRaisesRegex(
+                materials.MaterialError, "locked Kata version"
+            ):
+                materials.verify_oci_image(
+                    LOCK_PATH, self.lock, "kata-extension", invalid
+                )
+
     def test_kata_extension_rejects_non_talos_shim_abis(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -615,14 +636,20 @@ agent_name = "kata"
     def test_talos_extension_tree_has_exact_top_level_contract(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            (root / "manifest.yaml").write_text("version: v1alpha1\n")
+            (root / "manifest.yaml").write_text("version: 4.1.0\n")
             (root / "rootfs").mkdir()
-            materials.verify_talos_extension_tree(root)
+            materials.verify_talos_extension_tree(root, "4.1.0")
+            (root / "manifest.yaml").write_text("version: 4.0.0\n")
+            with self.assertRaisesRegex(
+                materials.MaterialError, "locked Kata version"
+            ):
+                materials.verify_talos_extension_tree(root, "4.1.0")
+            (root / "manifest.yaml").write_text("version: 4.1.0\n")
             (root / ".dockerenv").touch()
             with self.assertRaisesRegex(
                 materials.MaterialError, "unexpected entries.*dockerenv"
             ):
-                materials.verify_talos_extension_tree(root)
+                materials.verify_talos_extension_tree(root, "4.1.0")
 
     def test_build_recipe_has_no_publication_path(self) -> None:
         recipe = (SCRIPT_DIR / "build.sh").read_text(encoding="utf-8")
@@ -893,7 +920,7 @@ agent_name = "kata"
 
     def _kata_extension_entries(self) -> dict[str, bytes | None]:
         return {
-            "manifest.yaml": b"version: v1alpha1\n",
+            "manifest.yaml": b"version: 4.1.0\n",
             "rootfs": None,
             "rootfs/usr/local/bin/containerd-shim-kata-qemu-snp-v2": b"shim",
             "rootfs/usr/local/bin/containerd-shim-kata-v2": self._static_amd64_elf(),
