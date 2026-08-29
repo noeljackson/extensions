@@ -298,12 +298,10 @@ PY
   printf 'Kata static tarball contains the exact runtime, empty resolver, and required guest storage tools\n'
 )
 
-overlay_confidential_payload() {
+bind_extension_manifest_version() {
   local static_root=$1
-  local rootfs=$2
-  local manifest=$3
-  local source destination confidential_verity_params qemu_snp_config expected_overhead_memory
-  local cdh_api_timeout_seconds cdh_api_timeout_ms create_container_timeout_seconds
+  local manifest=$2
+  local source
   local kata_version expected_kata_version
 
   source="$static_root/opt/kata/VERSION"
@@ -331,6 +329,13 @@ manifest_path.write_text("\n".join(lines) + "\n")
 PY
   grep -Fqx "version: ${kata_version}" "$manifest" \
     || die "Talos extension manifest does not identify the exact Kata version"
+}
+
+overlay_confidential_payload() {
+  local static_root=$1
+  local rootfs=$2
+  local source destination confidential_verity_params qemu_snp_config expected_overhead_memory
+  local cdh_api_timeout_seconds cdh_api_timeout_ms create_container_timeout_seconds
 
   source="$static_root/opt/kata/runtime-rs/bin/containerd-shim-kata-v2"
   has_executable_mode "$source" || die "exact Kata runtime-rs shim is missing or has no executable mode bit"
@@ -588,13 +593,15 @@ case "$command" in
       --build-arg "BASE_IMAGE=${base_image}" \
       --output "type=local,dest=$work_dir/context/extension" \
       "$script_dir"
+    tar --zstd -xf "$kata_tarball" -C "$work_dir/static"
+    bind_extension_manifest_version \
+      "$work_dir/static" \
+      "$work_dir/context/extension/manifest.yaml"
     python3 "$materials_tool" --lock "$lock_file" verify-extension-tree \
       --root "$work_dir/context/extension"
-    tar --zstd -xf "$kata_tarball" -C "$work_dir/static"
     overlay_confidential_payload \
       "$work_dir/static" \
-      "$work_dir/context/extension/rootfs" \
-      "$work_dir/context/extension/manifest.yaml"
+      "$work_dir/context/extension/rootfs"
     python3 "$materials_tool" --lock "$lock_file" emit \
       --output-dir "$work_dir/context/extension/rootfs/usr/local/share/codewire/confidential-storage"
     python3 "$materials_tool" --lock "$lock_file" verify-extension-tree \
