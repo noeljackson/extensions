@@ -165,16 +165,23 @@ timeout --signal=TERM "${horizon}s" qemu-system-x86_64 \
   -device virtio-blk-pci,drive=coco,serial=extension-coco \
   >"$qemu_log" 2>&1 || qemu_status=$?
 
-[[ $qemu_status -eq 124 ]] \
-  || die "guest exited before the bounded TCG observation horizon (status ${qemu_status})"
 sed -r 's/\x1B\[[0-9;?]*[ -\/]*[@-~]//g; s/\r$//' "$raw_log" >"$clean_log"
+
+if [[ $qemu_status -eq 124 ]]; then
+  die "TCG guest did not enforce the required Init-Data failure before the observation horizon"
+fi
+[[ $qemu_status -eq 0 ]] \
+  || die "TCG guest failed to power off cleanly after required Init-Data rejection (status ${qemu_status})"
 
 required_markers=(
   'dm-0 (dm-verity) is ready'
   'Finished kata-extension-mount@coco'
   'Started kata-agent.service'
   'Reached target kata-containers.target'
-  'ttRPC server started'
+  'No TEE platform detected. Sample Attester will be used.'
+  'Error: required Init-Data was not supplied'
+  'Powering off: unit kata-agent.service failed'
+  'reboot: Power down'
 )
 for marker in "${required_markers[@]}"; do
   grep -Fq "$marker" "$clean_log" || die "guest boot lacks required marker: $marker"
@@ -183,5 +190,5 @@ if grep -Fq 'Failed to start kata-extension-mount@coco' "$clean_log"; then
   die "CoCo extension mount failed"
 fi
 
-printf 'Kata TCG boot smoke passed: dm-verity root, CoCo extension, and Kata Agent ready\n'
-printf 'note: this proves guest boot integrity, not SEV-SNP attestation\n'
+printf 'Kata TCG boot smoke passed: dm-verity root, CoCo extension, Agent start, and required Init-Data fail-closed\n'
+printf 'note: TCG has no TEE or measured Init-Data; live SNP must prove attestation readiness\n'

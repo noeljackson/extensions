@@ -122,9 +122,12 @@ CODEWIRE_CONFIDENTIAL_STORAGE_SCRATCH_ROOT="$PWD/_out/scratch" \
 
 The smoke parses both measured-disk bindings from the final runtime-rs config,
 boots the packaged kernel with the packaged confidential root and CoCo extension
-disks, and requires dm-verity root activation, the extension mount, and Kata
-Agent readiness. It retains its private full log directory on failure and emits
-only fixed structural claims on success. This is a fast guest-boot contract
+disks, and requires dm-verity root activation, the extension mount, Kata Agent
+startup, and the strict rejection of a TCG guest that has neither a TEE nor
+measured Init-Data. A clean poweroff after that exact rejection is success;
+remaining alive until the horizon or accepting the sample attester is failure.
+It retains its private full log directory on failure and emits only fixed
+structural claims on success. This is a fast guest-boot and fail-closed contract
 test; it does not emulate `/dev/sev`, produce an SNP report, or replace live SNP
 attestation and storage acceptance.
 
