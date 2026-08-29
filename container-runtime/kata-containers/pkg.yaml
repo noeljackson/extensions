@@ -11,6 +11,9 @@ dependencies:
     to: /rootfs/usr/local/lib/containers/nydus-for-kata-tee/
   - image: ghcr.io/noeljackson/kata-deploy-codewire@sha256:a02db0ba8179347258c7e601f3f7366cd55fa2e6bff9f5f90e67905ba5aacaf7
     from: /opt/kata-artifacts/nydus-snapshotter
+  - image: docker.io/library/golang:1.26.7-alpine3.23@sha256:b17af760035fc2f338eed92d448a6c67f2d45438844fc6c60678fa5f99e44b57
+    from: /usr/local/go/
+    to: /toolchain/go/
 steps:
   - sources:
     # {{ if eq .ARCH "aarch64" }} This in fact is YAML comment, but Go templating instruction is evaluated by bldr
@@ -63,14 +66,14 @@ steps:
         cp ./opt/kata/bin/qemu-system-x86_64-snp-experimental /rootfs/usr/local/libexec/
         cp -a ./opt/kata/lib/kata-qemu-snp-experimental /rootfs/usr/local/lib/
         cp -a ./opt/kata/share/kata-qemu-snp-experimental/qemu /rootfs/usr/local/share/kata-qemu-snp-experimental/
-        CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' \
+        GOTOOLCHAIN=local CGO_ENABLED=0 /toolchain/go/bin/go build -trimpath -ldflags='-s -w' \
           -o /rootfs/usr/local/bin/qemu-system-x86_64-snp-experimental \
           /pkg/qemu-snp-wrapper.go
         mkdir -p /rootfs/usr/local/lib/containers/nydus-for-kata-tee
         cp /containerd-nydus-grpc /rootfs/usr/local/lib/containers/nydus-for-kata-tee/
         cp /nydus-overlayfs /rootfs/usr/local/lib/containers/nydus-for-kata-tee/
         cp /nydus-overlayfs /rootfs/usr/local/bin/nydus-overlayfs
-        CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' \
+        GOTOOLCHAIN=local CGO_ENABLED=0 /toolchain/go/bin/go build -trimpath -ldflags='-s -w' \
           -o /rootfs/usr/local/bin/mount.fuse \
           /pkg/mount-fuse-nydus-wrapper.go
         cp /pkg/config-guest-pulling.toml /rootfs/usr/local/lib/containers/nydus-for-kata-tee/config-guest-pulling.toml
@@ -136,6 +139,10 @@ steps:
         grep -Fqx '[hypervisor.clh]' /rootfs/usr/local/share/kata-containers/configuration.toml
         grep -Eq '^dial_timeout_ms = [1-9][0-9]*$' /rootfs/usr/local/share/kata-containers/configuration.toml
         ! grep -Eq '^dial_timeout[[:space:]]*=' /rootfs/usr/local/share/kata-containers/configuration.toml
+        /toolchain/go/bin/go version -m /rootfs/usr/local/bin/qemu-system-x86_64-snp-experimental \
+          | grep -Fq ': go1.26.7'
+        /toolchain/go/bin/go version -m /rootfs/usr/local/bin/mount.fuse \
+          | grep -Fq ': go1.26.7'
         mkdir -p /extensions-validator-rootfs
         cp -r /rootfs/ /extensions-validator-rootfs/rootfs
         cp /pkg/manifest.yaml /extensions-validator-rootfs/manifest.yaml
