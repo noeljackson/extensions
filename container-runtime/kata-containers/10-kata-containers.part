@@ -4,3 +4,39 @@
   pod_annotations = ["io.katacontainers.*"]
 [plugins."io.containerd.cri.v1.runtime".containerd.runtimes.kata.options]
   ConfigPath = "/usr/local/share/kata-containers/configuration.toml"
+
+# Codewire commodity parity: expose the same handler name the RKE2/csrke2-dev
+# profile uses (`kata-clh`). Same Cloud-Hypervisor config, standard Kata shim.
+[plugins."io.containerd.cri.v1.runtime".containerd.runtimes.kata-clh]
+  runtime_type = "io.containerd.kata.v2"
+  privileged_without_host_devices = true
+  pod_annotations = ["io.katacontainers.*"]
+[plugins."io.containerd.cri.v1.runtime".containerd.runtimes.kata-clh.options]
+  ConfigPath = "/usr/local/share/kata-containers/configuration.toml"
+
+# Codewire confidential proof parity: expose the same handler name the
+# RKE2/csrke2-dev profile uses (`kata-qemu-snp`). This uses the QEMU-SNP
+# configuration and static payload installed under the Talos extension
+# /usr/local layout.
+[plugins."io.containerd.cri.v1.runtime".containerd.runtimes.kata-qemu-snp]
+  runtime_type = "io.containerd.kata-qemu-snp.v2"
+  privileged_without_host_devices = true
+  pod_annotations = ["io.katacontainers.*"]
+  snapshotter = "nydus-for-kata-tee"
+[plugins."io.containerd.cri.v1.runtime".containerd.runtimes.kata-qemu-snp.options]
+  ConfigPath = "/usr/local/share/kata-containers/configuration-qemu-snp.toml"
+
+# Confidential image path: mirror Kata Deploy's nydus-for-Kata-TEE setup for
+# qemu-snp only. Do not make nydus global: runc stays on Talos' default
+# overlayfs snapshotter, and kata-clh can move to devmapper/dm-thin separately.
+[proxy_plugins."nydus-for-kata-tee"]
+  type = "snapshot"
+  address = "/run/nydus-for-kata-tee/containerd-nydus-grpc.sock"
+[proxy_plugins."nydus-for-kata-tee".exports]
+  root = "/var/lib/nydus-for-kata-tee"
+
+[plugins."io.containerd.cri.v1.images"]
+  discard_unpacked_layers = false
+  disable_snapshot_annotations = false
+[plugins."io.containerd.cri.v1.images".runtime_platforms."kata-qemu-snp"]
+  snapshotter = "nydus-for-kata-tee"

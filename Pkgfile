@@ -32,4 +32,4 @@ vars:
   LINUX_DVB_FIRMWARE_SHA512: 2372dba98083c76865f5f0f8101b1160888e03cdbe911dd08621e7b6f38e8a25ae5d56eefc21728bf65fd09ea613b53606df4021d3972b0bc9d2bd8b6cbe20a1
 
 labels:
-  org.opencontainers.image.source: https://github.com/siderolabs/extensions
+  org.opencontainers.image.source: https://github.com/noeljackson/extensions
