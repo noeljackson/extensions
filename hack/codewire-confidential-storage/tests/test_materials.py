@@ -37,8 +37,8 @@ class MaterialTests(unittest.TestCase):
                 "bb2085a736396b9912c3c34c0b5404596ddaf9d6",
             ),
             "kata_containers": (
-                "14323d54800d881093a53a9d40ab41d14a769808",
-                "948c80f7c51a313534fa4ebfee501ed83bd3098a",
+                "c3774d4a0b57bf16c550d6f698024f07589ee07b",
+                "036e4f44fe3bd0c01e4feead738b8f5719d3c77f",
             ),
             "trustee": (
                 "24632a8789de9a83a9bf14066b457d249fb1de8c",
@@ -75,6 +75,20 @@ class MaterialTests(unittest.TestCase):
         self.assertEqual(
             self.lock["talos_extensions"]["installer_profile"],
             "servernet-confidential-storage-only",
+        )
+
+    def test_kernel_vex_is_exact_and_narrow(self) -> None:
+        vex = json.loads(
+            (SCRIPT_DIR / "security" / "kata-extension.openvex.json").read_text()
+        )
+        self.assertEqual(vex["@context"], "https://openvex.dev/ns/v0.2.0")
+        self.assertEqual(len(vex["statements"]), 1)
+        statement = vex["statements"][0]
+        self.assertEqual(statement["vulnerability"]["@id"], "CVE-2020-27815")
+        self.assertEqual(statement["status"], "fixed")
+        self.assertEqual(
+            statement["products"],
+            [{"@id": "pkg:generic/linux-kernel@7.2.2"}],
         )
 
     def test_branch_archive_and_short_revision_are_rejected(self) -> None:
@@ -347,7 +361,7 @@ class MaterialTests(unittest.TestCase):
                 )
                 text = (first / name).read_text(encoding="utf-8")
                 self.assertNotRegex(text.lower(), r"password|private_key|admin_token")
-                self.assertIn("14323d54800d881093a53a9d40ab41d14a769808", text)
+                self.assertIn("c3774d4a0b57bf16c550d6f698024f07589ee07b", text)
 
     def test_oci_subject_uses_platform_manifest_and_checks_attestations(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

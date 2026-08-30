@@ -68,6 +68,21 @@ python3 -m unittest discover -s hack/codewire-confidential-storage/tests -p 'tes
 shellcheck hack/codewire-confidential-storage/build.sh
 ```
 
+Scan the exact built extension with the reviewed, kernel-version-specific VEX:
+
+```bash
+supplychain image \
+  --sbom=_out/confidential-storage/kata-extension.spdx.json \
+  --fail-on=high \
+  --only-fixed \
+  --vex=hack/codewire-confidential-storage/security/kata-extension.openvex.json \
+  IMAGE
+```
+
+The VEX covers only the stale NVD CPE match for CVE-2020-27815 in Linux
+7.2.2. It must not be broadened to waive kernel findings that a current guest
+kernel or its measured configuration should resolve.
+
 To re-check the public immutable archives:
 
 ```bash

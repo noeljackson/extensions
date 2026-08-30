@@ -1,0 +1,21 @@
+{
+  "@context": "https://openvex.dev/ns/v0.2.0",
+  "@id": "https://github.com/noeljackson/extensions/security/vex/kata-extension-kernel-7.2.2",
+  "author": "Noel <n@noeljackson.com>",
+  "timestamp": "2026-08-30T00:20:20Z",
+  "version": 1,
+  "statements": [
+    {
+      "vulnerability": {
+        "@id": "CVE-2020-27815"
+      },
+      "products": [
+        {
+          "@id": "pkg:generic/linux-kernel@7.2.2"
+        }
+      ],
+      "status": "fixed",
+      "status_notes": "Linux 7.2.2 contains the JFS fix merged before Linux 5.10.4. This statement corrects a branch-unbounded NVD CPE match and does not suppress any other kernel finding."
+    }
+  ]
+}

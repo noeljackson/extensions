@@ -3,7 +3,7 @@
   "platforms": [
     "linux/amd64"
   ],
-  "source_date_epoch": 1788048023,
+  "source_date_epoch": 1788049197,
   "sources": {
     "extensions": {
       "repository": "https://github.com/noeljackson/extensions",
@@ -29,13 +29,13 @@
     },
     "kata_containers": {
       "repository": "https://github.com/noeljackson/kata-containers",
-      "revision": "14323d54800d881093a53a9d40ab41d14a769808",
-      "tree": "948c80f7c51a313534fa4ebfee501ed83bd3098a",
-      "source_date_epoch": 1788046678,
+      "revision": "c3774d4a0b57bf16c550d6f698024f07589ee07b",
+      "tree": "036e4f44fe3bd0c01e4feead738b8f5719d3c77f",
+      "source_date_epoch": 1788049197,
       "archive": {
-        "url": "https://codeload.github.com/noeljackson/kata-containers/tar.gz/14323d54800d881093a53a9d40ab41d14a769808",
-        "sha256": "61939ef423f5aa577c4be4f0baeab237cccec5f5bb94c43a73c6038e4d68eef0",
-        "sha512": "0061e5fd88feeb8d2eea7268287dce68f244dd0ba28ad0edf66d2e241ef9f07327425fbcf0a4aad53345ea9a1952a71434e0b9fb0880062c59889c24a3c813ce"
+        "url": "https://codeload.github.com/noeljackson/kata-containers/tar.gz/c3774d4a0b57bf16c550d6f698024f07589ee07b",
+        "sha256": "b3207f97675823db6d229a5cf20b28f8a754a8df2318bddecba1e1e86e3f1046",
+        "sha512": "c589a53c273044b03e2f54fa765bcd8aac32b8d2915b25df9757e94b7c63684c50c8951ffa6252929550100ff5d45f366c670637d9803018a5409ba577d9e9f7"
       }
     },
     "trustee": {

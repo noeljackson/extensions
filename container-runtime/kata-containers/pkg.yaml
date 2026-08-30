@@ -11,7 +11,7 @@ dependencies:
     to: /rootfs/usr/local/lib/containers/nydus-for-kata-tee/
   - image: ghcr.io/noeljackson/kata-deploy-codewire@sha256:88bfde4167ec9528d8c37684e9ca6368a781075c3cbf8c8e423047fb213d0539
     from: /opt/nydus-snapshotter/bin
-  - image: docker.io/library/golang:1.26.7-alpine3.23@sha256:b17af760035fc2f338eed92d448a6c67f2d45438844fc6c60678fa5f99e44b57
+  - image: docker.io/library/golang:{{ .KATA_WRAPPER_GO_VERSION }}-alpine3.23@sha256:b17af760035fc2f338eed92d448a6c67f2d45438844fc6c60678fa5f99e44b57
     from: /usr/local/go/
     to: /toolchain/go/
 steps:
@@ -44,6 +44,8 @@ steps:
     install:
       - |
         cd kata-static
+
+        test "$(/toolchain/go/bin/go env GOVERSION)" = "go{{ .KATA_WRAPPER_GO_VERSION }}"
 
         mkdir -p /rootfs/usr/local/{bin,libexec,share/kata-containers}
 
@@ -140,9 +142,9 @@ steps:
         grep -Eq '^dial_timeout_ms = [1-9][0-9]*$' /rootfs/usr/local/share/kata-containers/configuration.toml
         ! grep -Eq '^dial_timeout[[:space:]]*=' /rootfs/usr/local/share/kata-containers/configuration.toml
         /toolchain/go/bin/go version -m /rootfs/usr/local/bin/qemu-system-x86_64-snp-experimental \
-          | grep -Fq ': go1.26.7'
+          | grep -Fq ': go{{ .KATA_WRAPPER_GO_VERSION }}'
         /toolchain/go/bin/go version -m /rootfs/usr/local/bin/mount.fuse \
-          | grep -Fq ': go1.26.7'
+          | grep -Fq ': go{{ .KATA_WRAPPER_GO_VERSION }}'
         mkdir -p /extensions-validator-rootfs
         cp -r /rootfs/ /extensions-validator-rootfs/rootfs
         cp /pkg/manifest.yaml /extensions-validator-rootfs/manifest.yaml
