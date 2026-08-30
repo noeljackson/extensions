@@ -29,8 +29,8 @@ class MaterialTests(unittest.TestCase):
     def test_canonical_lock_binds_accepted_sources(self) -> None:
         expected = {
             "extensions": (
-                "98cdcc5c258f9f55d4f717132b638fcb25d7e629",
-                "ad056ff2ce9b5845dc61f6c91b5b08084fb9339e",
+                "40da667500f495a1670cd5c2cfa05d42653f4098",
+                "202bdd4029112c1dd0f22a9b6051ee4f9db98fc1",
             ),
             "guest_components": (
                 "83c29d8a5e2337df5607594a96e364424d012719",
