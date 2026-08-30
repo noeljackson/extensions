@@ -61,15 +61,55 @@ layer="$work_dir/image/${layer_digest#sha256:}"
 [[ -f "$layer" ]] || die "OCI layer blob is missing"
 
 payload=rootfs/usr/local/share/kata-containers
+kernel_member="$(
+  python3 - "$layer" "$payload/vmlinuz.container" <<'PY'
+import pathlib
+import posixpath
+import re
+import sys
+import tarfile
+
+layer = pathlib.Path(sys.argv[1])
+link_name = sys.argv[2]
+with tarfile.open(layer, mode="r:gz") as archive:
+    try:
+        link = archive.getmember(link_name)
+    except KeyError as error:
+        raise SystemExit("Kata extension layer lacks vmlinuz.container") from error
+    if not link.issym():
+        raise SystemExit("Kata extension vmlinuz.container is not a symbolic link")
+    target = posixpath.normpath(
+        posixpath.join(posixpath.dirname(link.name), link.linkname)
+    )
+    if re.fullmatch(
+        r"rootfs/usr/local/share/kata-containers/"
+        r"vmlinuz-[0-9]+(?:\.[0-9]+)*-[0-9]+",
+        target,
+    ) is None:
+        raise SystemExit("Kata extension vmlinuz.container has an unsafe target")
+    try:
+        kernel = archive.getmember(target)
+    except KeyError as error:
+        raise SystemExit(
+            "Kata extension layer lacks the selected versioned kernel"
+        ) from error
+    if not kernel.isfile() or kernel.size <= 0:
+        raise SystemExit("Kata extension selected kernel is not a non-empty file")
+print(target)
+PY
+)"
 tar -xzf "$layer" -C "$work_dir" \
   "$payload/configuration-qemu-snp.toml" \
   "$payload/kata-containers-confidential.img" \
   "$payload/kata-containers-coco-extension.img" \
   "$payload/root_hash_confidential.txt" \
   "$payload/root_hash_coco-extension.txt" \
-  "$payload/vmlinuz.container"
+  "$payload/vmlinuz.container" \
+  "$kernel_member"
 chmod -R go-rwx "$work_dir"
 payload="$work_dir/$payload"
+[[ -s "$payload/vmlinuz.container" ]] ||
+  die "extracted vmlinuz.container does not resolve to its versioned kernel"
 
 mapfile -t boot_values < <(
   python3 - \
@@ -169,6 +209,9 @@ sed -r 's/\x1B\[[0-9;?]*[ -\/]*[@-~]//g; s/\r$//' "$raw_log" >"$clean_log"
 
 if [[ $qemu_status -eq 124 ]]; then
   die "TCG guest did not enforce the required Init-Data failure before the observation horizon"
+fi
+if [[ $qemu_status -ne 0 ]] && ! grep -Fq 'Error: required Init-Data was not supplied' "$clean_log"; then
+  die "QEMU failed before the required Init-Data rejection (status ${qemu_status})"
 fi
 [[ $qemu_status -eq 0 ]] \
   || die "TCG guest failed to power off cleanly after required Init-Data rejection (status ${qemu_status})"

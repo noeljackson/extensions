@@ -811,6 +811,15 @@ metadata:
         self.assertIn("No TEE platform detected. Sample Attester will be used.", smoke)
         self.assertIn("required Init-Data fail-closed", smoke)
         self.assertIn("if [[ $qemu_status -eq 124 ]]; then", smoke)
+        self.assertIn(
+            "Kata extension vmlinuz.container has an unsafe target", smoke
+        )
+        self.assertIn('"$kernel_member"', smoke)
+        self.assertIn(
+            "extracted vmlinuz.container does not resolve to its versioned kernel",
+            smoke,
+        )
+        self.assertIn("QEMU failed before the required Init-Data rejection", smoke)
         self.assertNotIn("guest exited before the bounded TCG observation horizon", smoke)
         self.assertNotIn("'ttRPC server started'", smoke)
         self.assertIn(".bootable == true", recipe)
