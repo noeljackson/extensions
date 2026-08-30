@@ -3,17 +3,17 @@
   "platforms": [
     "linux/amd64"
   ],
-  "source_date_epoch": 1788049197,
+  "source_date_epoch": 1788049828,
   "sources": {
     "extensions": {
       "repository": "https://github.com/noeljackson/extensions",
-      "revision": "40da667500f495a1670cd5c2cfa05d42653f4098",
-      "tree": "202bdd4029112c1dd0f22a9b6051ee4f9db98fc1",
-      "source_date_epoch": 1788048023,
+      "revision": "2a533ae7eb4d3674829907144200a49c1f2e03ee",
+      "tree": "b5fbbb360aa0e7581104ca270d85c17c607e3863",
+      "source_date_epoch": 1788049828,
       "archive": {
-        "url": "https://codeload.github.com/noeljackson/extensions/tar.gz/40da667500f495a1670cd5c2cfa05d42653f4098",
-        "sha256": "821d75d73a64b1a1567dccdc77b4b657903ab3c9b3ad7024fb844501c9418faf",
-        "sha512": "118701a540d49614d4625b237d6631580992665559a758e5814e6a26ce40c2d4011d2d0a986910ce1111fb83565a64ffe0200865e97ca8f2564b6ce6c00808eb"
+        "url": "https://codeload.github.com/noeljackson/extensions/tar.gz/2a533ae7eb4d3674829907144200a49c1f2e03ee",
+        "sha256": "4e366630cd61d943e93bc280bafa6c0ddcbf598cdd5e78c2ec51ce9cd2941492",
+        "sha512": "da2e0f269a958e1ff1402796cdb2bd3eaeefdf51b92d7f1df6aee639068c2a5a186250bb494812b2883233f2bb41891079a307ae2752abf352f67a5e7597fedf"
       }
     },
     "guest_components": {
