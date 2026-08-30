@@ -55,6 +55,10 @@ class MaterialTests(unittest.TestCase):
             "ubuntu26.04",
         )
         self.assertEqual(
+            self.lock["kata_build_contract"]["host_wrapper_go_version"],
+            "go1.26.7",
+        )
+        self.assertEqual(
             self.lock["kata_build_contract"]["kata_version"],
             "4.1.0",
         )
@@ -113,6 +117,19 @@ class MaterialTests(unittest.TestCase):
         changed = copy.deepcopy(self.lock)
         changed["kata_build_contract"]["guest_artifact_variant"] = "latest"
         with self.assertRaisesRegex(materials.MaterialError, "Ubuntu 26.04"):
+            materials.validate_lock(changed)
+
+    def test_host_wrapper_toolchain_is_fixed(self) -> None:
+        changed = copy.deepcopy(self.lock)
+        changed["kata_build_contract"]["host_wrapper_go_version"] = "go1.26.6"
+        with self.assertRaisesRegex(materials.MaterialError, "exactly Go 1.26.7"):
+            materials.validate_lock(changed)
+
+        changed = copy.deepcopy(self.lock)
+        changed["base_images"]["host_wrapper_go_toolchain"] = (
+            "docker.io/library/golang:1.26.7-alpine3.23@sha256:" + "0" * 64
+        )
+        with self.assertRaisesRegex(materials.MaterialError, "fixed Go 1.26.7"):
             materials.validate_lock(changed)
 
     def test_qemu_snp_guest_overhead_is_locked(self) -> None:
@@ -737,6 +754,13 @@ metadata:
         self.assertNotIn("docker export", recipe)
         self.assertNotIn("docker create", recipe)
         self.assertIn("base-rootfs.Dockerfile", recipe)
+        self.assertIn("host-wrappers.Dockerfile", recipe)
+        self.assertIn("checkout_locked_source extensions", recipe)
+        self.assertIn("build_host_wrappers", recipe)
+        self.assertIn("--network=none", recipe)
+        self.assertIn(".base_images.host_wrapper_go_toolchain", recipe)
+        self.assertIn(".kata_build_contract.host_wrapper_go_version", recipe)
+        self.assertIn('"$work_dir/host-wrappers"', recipe)
         self.assertIn('"$work_dir/context/extension/rootfs"', recipe)
         self.assertIn(
             'built_tarball="$local_build/kata-static.tar.zst"',
@@ -917,6 +941,7 @@ metadata:
                         if name
                         in {
                             "rootfs/usr/local/bin/containerd-shim-kata-v2",
+                            "rootfs/usr/local/bin/mount.fuse",
                             "rootfs/usr/local/bin/qemu-system-x86_64-snp-experimental",
                             "rootfs/usr/local/libexec/qemu-system-x86_64-snp-experimental",
                         }
@@ -1050,6 +1075,7 @@ metadata:
             "rootfs/usr/local/bin/containerd-shim-kata-qemu-snp-v2": b"shim",
             "rootfs/usr/local/bin/containerd-shim-kata-v2": self._static_amd64_elf(),
             "rootfs/usr/local/bin/kata-ctl": b"kata-ctl",
+            "rootfs/usr/local/bin/mount.fuse": b"mount-fuse-wrapper",
             "rootfs/usr/local/bin/qemu-system-x86_64-snp-experimental": b"qemu-wrapper",
             "rootfs/usr/local/libexec/qemu-system-x86_64-snp-experimental": b"qemu-binary",
             "rootfs/usr/local/lib/kata-qemu-snp-experimental/libfdt.a": b"qemu-library",

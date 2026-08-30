@@ -180,6 +180,7 @@ def validate_lock(lock: dict[str, Any]) -> None:
         base_images,
         {
             "buildkit_sbom_scanner",
+            "host_wrapper_go_toolchain",
             "kata_talos_extension",
         },
         "base_images",
@@ -189,6 +190,13 @@ def validate_lock(lock: dict[str, Any]) -> None:
         base_images["buildkit_sbom_scanner"],
     ):
         raise MaterialError("BuildKit SBOM scanner must be its exact Docker Hub digest")
+    if base_images["host_wrapper_go_toolchain"] != (
+        "docker.io/library/golang:1.26.7-alpine3.23@sha256:"
+        "b17af760035fc2f338eed92d448a6c67f2d45438844fc6c60678fa5f99e44b57"
+    ):
+        raise MaterialError(
+            "host-wrapper Go toolchain must be the fixed Go 1.26.7 image digest"
+        )
     if not re.fullmatch(
         r"ghcr\.io/noeljackson/kata-containers@sha256:[0-9a-f]{64}",
         base_images["kata_talos_extension"],
@@ -246,6 +254,7 @@ def validate_lock(lock: dict[str, Any]) -> None:
         kata,
         {
             "guest_artifact_variant",
+            "host_wrapper_go_version",
             "kata_version",
             "qemu_snp_overhead_memory_mib",
             "persistent_volume_max_gib",
@@ -261,6 +270,8 @@ def validate_lock(lock: dict[str, Any]) -> None:
         raise MaterialError(
             "Kata guest artifact variant must select the fixed Ubuntu 26.04 image"
         )
+    if kata["host_wrapper_go_version"] != "go1.26.7":
+        raise MaterialError("host wrappers must be built with exactly Go 1.26.7")
     if not isinstance(kata["kata_version"], str) or re.fullmatch(
         r"[0-9]+\.[0-9]+\.[0-9]+", kata["kata_version"]
     ) is None:
@@ -906,6 +917,7 @@ def verify_kata_extension_layer(data: bytes, expected_kata_version: str) -> None
         "rootfs/usr/local/bin/containerd-shim-kata-v2",
         "rootfs/usr/local/bin/containerd-shim-kata-qemu-snp-v2",
         "rootfs/usr/local/bin/kata-ctl",
+        "rootfs/usr/local/bin/mount.fuse",
         "rootfs/usr/local/bin/qemu-system-x86_64-snp-experimental",
         "rootfs/usr/local/libexec/qemu-system-x86_64-snp-experimental",
         "rootfs/usr/local/lib/kata-qemu-snp-experimental/libfdt.a",
@@ -952,6 +964,7 @@ def verify_kata_extension_layer(data: bytes, expected_kata_version: str) -> None
             "Kata extension vmlinuz.container does not select its exact versioned kernel"
         )
     for executable_name in (
+        "rootfs/usr/local/bin/mount.fuse",
         "rootfs/usr/local/bin/qemu-system-x86_64-snp-experimental",
         "rootfs/usr/local/libexec/qemu-system-x86_64-snp-experimental",
     ):

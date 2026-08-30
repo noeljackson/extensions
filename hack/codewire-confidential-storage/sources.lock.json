@@ -52,6 +52,7 @@
   },
   "base_images": {
     "buildkit_sbom_scanner": "docker.io/docker/buildkit-syft-scanner@sha256:79e7b013cbec16bbb436f312819a49a4a57752b2270c1a9332ae1a10fcc82a68",
+    "host_wrapper_go_toolchain": "docker.io/library/golang:1.26.7-alpine3.23@sha256:b17af760035fc2f338eed92d448a6c67f2d45438844fc6c60678fa5f99e44b57",
     "kata_talos_extension": "ghcr.io/noeljackson/kata-containers@sha256:7d33ec6d77e351db730b27217fcc3409302cb6018d5ac020544ea8ca6da58467"
   },
   "trustee_images": {
@@ -82,6 +83,7 @@
   },
   "kata_build_contract": {
     "guest_artifact_variant": "ubuntu26.04",
+    "host_wrapper_go_version": "go1.26.7",
     "kata_version": "4.1.0",
     "qemu_snp_overhead_memory_mib": 2048,
     "persistent_volume_max_gib": 50,
@@ -103,7 +105,7 @@
       "tools/osbuilder/rootfs-builder/ubuntu/config.sh": "0f40cd9ee3b6bcf4b456c2bd252df54891e96cee81b9b2066948f2fddfd783ea",
       "tools/packaging/kata-deploy/local-build/Makefile": "6ce51f2b580e09d77cefd0bd17b04ffaaf9b95aae0a556ff473a512e035f3e50",
       "tools/packaging/kata-deploy/local-build/kata-deploy-binaries.sh": "530769186728607210b6611701202dd5bf4721390e59ebbd257c6d34c9e2822e",
-      "versions.yaml": "7f09f3595e10201b0ad666e0ab212c025571c9113dae86be167c181f760270a9"
+      "versions.yaml": "f29e2a4101e142a5e4470bef7b1f6c5811d765d87937f6dd7ee778ff256d0c12"
     },
     "required_packages": [
       "cryptsetup-bin",

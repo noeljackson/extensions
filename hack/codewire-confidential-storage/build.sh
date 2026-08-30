@@ -408,9 +408,40 @@ PY
     || die "Talos extension metadata does not identify the exact Kata version"
 }
 
+build_host_wrappers() {
+  local extensions_source=$1
+  local output=$2
+  local context go_image go_version
+
+  context="$(dirname "$output")/host-wrapper-context"
+  mkdir -p "$context" "$output"
+  install -m 0644 \
+    "$extensions_source/container-runtime/kata-containers/qemu-snp-wrapper.go" \
+    "$context/qemu-snp-wrapper.go"
+  install -m 0644 \
+    "$extensions_source/container-runtime/kata-containers/mount-fuse-nydus-wrapper.go" \
+    "$context/mount-fuse-nydus-wrapper.go"
+  go_image="$(lock_value '.base_images.host_wrapper_go_toolchain')"
+  go_version="$(lock_value '.kata_build_contract.host_wrapper_go_version')"
+  docker buildx build \
+    --no-cache \
+    --network=none \
+    --file "$script_dir/host-wrappers.Dockerfile" \
+    --platform linux/amd64 \
+    --build-arg "GO_IMAGE=${go_image}" \
+    --build-arg "GO_VERSION=${go_version}" \
+    --output "type=local,dest=$output" \
+    "$context"
+  for wrapper in qemu-system-x86_64-snp-experimental mount.fuse; do
+    has_executable_mode "$output/$wrapper" || \
+      die "exact host wrapper is missing or has no executable mode bit: $wrapper"
+  done
+}
+
 overlay_confidential_payload() {
   local static_root=$1
-  local rootfs=$2
+  local wrappers_root=$2
+  local rootfs=$3
   local source destination confidential_verity_params qemu_snp_config expected_overhead_memory
   local cdh_api_timeout_seconds cdh_api_timeout_ms create_container_timeout_seconds
   local qemu_snp_libs qemu_snp_data firmware kernel kernel_link kernel_dir
@@ -430,6 +461,18 @@ overlay_confidential_payload() {
   install -D -m 0755 "$source" "$rootfs/usr/local/libexec/qemu-system-x86_64-snp-experimental"
   cmp -s "$source" "$rootfs/usr/local/libexec/qemu-system-x86_64-snp-experimental" ||
     die "final QEMU-SNP binary differs after copying"
+
+  source="$wrappers_root/qemu-system-x86_64-snp-experimental"
+  has_executable_mode "$source" || die "exact QEMU-SNP wrapper is missing or has no executable mode bit"
+  install -D -m 0755 "$source" "$rootfs/usr/local/bin/qemu-system-x86_64-snp-experimental"
+  cmp -s "$source" "$rootfs/usr/local/bin/qemu-system-x86_64-snp-experimental" ||
+    die "final QEMU-SNP wrapper differs after copying"
+
+  source="$wrappers_root/mount.fuse"
+  has_executable_mode "$source" || die "exact mount.fuse wrapper is missing or has no executable mode bit"
+  install -D -m 0755 "$source" "$rootfs/usr/local/bin/mount.fuse"
+  cmp -s "$source" "$rootfs/usr/local/bin/mount.fuse" ||
+    die "final mount.fuse wrapper differs after copying"
 
   qemu_snp_libs="$static_root/opt/kata/lib/kata-qemu-snp-experimental"
   replace_exact_tree "$qemu_snp_libs" "$rootfs/usr/local/lib/kata-qemu-snp-experimental"
@@ -696,6 +739,7 @@ case "$command" in
     [[ $# -eq 3 ]] || die "kata-extension requires KATA_TARBALL OUTPUT_DIRECTORY"
     require_command docker
     require_command diff
+    require_command git
     require_command jq
     require_command python3
     require_command tar
@@ -707,6 +751,8 @@ case "$command" in
     work_dir="$(new_work_dir)"
     trap 'cleanup_or_retain_work_dir "${work_dir:-}"' EXIT
     mkdir -p "$work_dir/context/extension" "$work_dir/static"
+    checkout_locked_source extensions "$work_dir/extensions-source"
+    build_host_wrappers "$work_dir/extensions-source" "$work_dir/host-wrappers"
     base_image="$(lock_value '.base_images.kata_talos_extension')"
     docker buildx build \
       --file "$script_dir/base-rootfs.Dockerfile" \
@@ -722,6 +768,7 @@ case "$command" in
       --root "$work_dir/context/extension"
     overlay_confidential_payload \
       "$work_dir/static" \
+      "$work_dir/host-wrappers" \
       "$work_dir/context/extension/rootfs"
     python3 "$materials_tool" --lock "$lock_file" emit \
       --output-dir "$work_dir/context/extension/rootfs/usr/local/share/codewire/confidential-storage"
