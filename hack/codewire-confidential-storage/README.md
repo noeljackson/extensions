@@ -3,20 +3,27 @@
 This directory owns the exact-source, non-publishing build boundary for the
 single-node Dev confidential-storage milestone. `sources.lock.json` binds every
 source by full Git commit, Git tree, codeload SHA-256/SHA-512, and immutable OCI
-digest where an existing image is consumed.
+digest where an existing image is consumed. The builder itself is bound by an
+exact SHA-256 input tree covering the two Dockerfiles, build/material tools, and
+QEMU smoke oracle; validation rejects a checkout that differs from that tree.
 
-The lock includes the accepted guest-components, Kata, and Trustee sources;
-the existing Codewire Talos-extension base; the BuildKit SBOM scanner; Trustee
-v0.21.0 images; and the exact `iscsi-tools` and `util-linux-tools` package
-inputs. Every image is bound by manifest digest. The latter two packages are
-restricted by contract to the
+The lock includes the accepted guest-components, Kata, downstream Trustee, and
+Extensions sources; the exact historical upstream Trustee commits used by the
+AS and RVPS images; the existing Codewire Talos-extension base; the BuildKit
+SBOM scanner; and the exact `iscsi-tools` and `util-linux-tools` package inputs.
+Each Trustee image binds its source commit/tree and dual-hashed archive,
+commit-derived publication tag, Dockerfile and workflow hashes, amd64 platform
+manifest, and immutable index digest. The downstream KBS entry additionally
+binds its embedded SBOM and SLSA provenance attestations. The latter two Talos
+packages are restricted by contract to the
 `servernet-confidential-storage-only` installer profile. Infra owns actually
 selecting them on that profile.
 
-The `extensions` source entry binds the accepted Talos-extension base. OP-1
-must additionally record the exact merged WI-4 builder commit. Kata's upstream
-guest-image recipe resolves distribution packages while it runs, so its final
-artifact digest, SBOM, and provenance—not an assumption of future byte-for-byte
+The `extensions` source entry binds the accepted Talos-extension base, while the
+separate builder input tree identifies the exact executable recipe even though
+the lock is necessarily stored beside that recipe. Kata's upstream guest-image
+recipe resolves distribution packages while it runs, so its final artifact
+digest, SBOM, and provenance—not an assumption of future byte-for-byte
 reproduction—form the immutable publication unit. Longhorn is intentionally
 absent from this build boundary: the cluster consumes the stock CSI deployment
 and this artifact supplies only the Kata guest/runtime contract above it.
@@ -63,6 +70,8 @@ Run the source-only gates:
 ```bash
 ./hack/codewire-confidential-storage/build.sh verify
 ./hack/codewire-confidential-storage/build.sh plan
+./hack/codewire-confidential-storage/build.sh verify-trustee-sources /path/to/trustee
+./hack/codewire-confidential-storage/build.sh verify-trustee-publications
 python3 -m unittest discover -s hack/codewire-confidential-storage/tests -p 'test_*.py'
 shellcheck hack/codewire-confidential-storage/build.sh
 ```
@@ -72,6 +81,12 @@ To re-check the public immutable archives:
 ```bash
 ./hack/codewire-confidential-storage/build.sh fetch-archives /tmp/codewire-source-cache
 ```
+
+`verify-trustee-publications` resolves every source-derived tag back to the
+locked index digest, selects the exact amd64 manifest, and checks the downstream
+KBS attestation manifest's SPDX and SLSA layer digests. It is the networked
+counterpart to the local source/recipe oracle; neither command publishes or
+mutates registry state.
 
 The expensive amd64 recipe is deliberately separate from publication:
 

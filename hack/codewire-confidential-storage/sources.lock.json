@@ -1,53 +1,86 @@
 {
-  "schema": "codewire.confidential-storage.sources/v1",
+  "schema": "codewire.confidential-storage.sources/v2",
   "platforms": [
     "linux/amd64"
   ],
-  "source_date_epoch": 1788013879,
+  "source_date_epoch": 1788368586,
   "sources": {
     "extensions": {
       "repository": "https://github.com/noeljackson/extensions",
-      "revision": "60b9cece943a209d84b29f5865a622fa4238ba6f",
-      "tree": "e8bd7d056bef8b8f378b966f72c1c41a0964c477",
-      "source_date_epoch": 1787401268,
+      "revision": "a71e2a3286f4a71f9dee5e11fe1ae53fa37e724e",
+      "tree": "697e7400a3738d8664f3666e2b260d8534cf660f",
+      "source_date_epoch": 1788365286,
       "archive": {
-        "url": "https://codeload.github.com/noeljackson/extensions/tar.gz/60b9cece943a209d84b29f5865a622fa4238ba6f",
-        "sha256": "cff3a69dcc5fc79c262fdc074974d7bbb8a48daefb6b3dd26be3de93b56295ef",
-        "sha512": "239975b5b72ff873caf99062443465a339fe416d1b78a2280c3e61c26c3355a8ecf17684a9cc694c663006fb33cc50bf778786101cca07b485ef0ba03ec3ff76"
+        "url": "https://codeload.github.com/noeljackson/extensions/tar.gz/a71e2a3286f4a71f9dee5e11fe1ae53fa37e724e",
+        "sha256": "8f659f5aaa78715d64bae5d64233b0bac880a418a81ac54a166c5275946933a6",
+        "sha512": "d2b7d314c989399a71eca9d61834f732cbd5e3f9b7f696734c237b89d88fb13b0e52757ff48cdb82c282ba24f4484bbdc602bf658a8b102a509c265dd0d55fe3"
       }
     },
     "guest_components": {
       "repository": "https://github.com/noeljackson/guest-components",
-      "revision": "8ca38472db8ac58f29f7166cadda9e8493f9fab1",
-      "tree": "6737741f51e87bfaa26f148af64cce84fa204cf0",
-      "source_date_epoch": 1788013879,
+      "revision": "60e8f1cec981db876acc9c5616f638adb19eaf85",
+      "tree": "b271dcc4169246f9944ed13380b43d68be749708",
+      "source_date_epoch": 1788368586,
       "archive": {
-        "url": "https://codeload.github.com/noeljackson/guest-components/tar.gz/8ca38472db8ac58f29f7166cadda9e8493f9fab1",
-        "sha256": "a9f7f06ae9859565730c6b62e4288a85c46fcc8f86a8287f8a9f39762de80a37",
-        "sha512": "2037bae2ca3e8d3c738cb2dff3a261aad6cec40ea1ebc5cd8828791f7dfb0d9bc62267a0d78832c975551dc42484a78720a384ca8ed5f94b561db5d701cb5274"
+        "url": "https://codeload.github.com/noeljackson/guest-components/tar.gz/60e8f1cec981db876acc9c5616f638adb19eaf85",
+        "sha256": "a8445469aace3dd032b2fbd99b7eab0593a074eebbaa57479255a59aa40950fa",
+        "sha512": "f595b40bb9ee887c798a8ef43fafe33cdd69b6cdd2645a4dbd535c3aa810540ccaf19f5635698e8e897e425bd401a98621c82647513d088a7425d4a8106a3f24"
       }
     },
     "kata_containers": {
       "repository": "https://github.com/noeljackson/kata-containers",
-      "revision": "b70a8f1d1c9aaf2c4812a272fe3ec6fd9a8194d7",
-      "tree": "466e2bcf73620d1c13c978215987655246fd8980",
-      "source_date_epoch": 1788011786,
+      "revision": "08a49558c321f5aabfd9f86621d5e1d2bd0a8e18",
+      "tree": "e8bdfd905aa430e9edbc4a3119e018277c83ed2e",
+      "source_date_epoch": 1788365774,
       "archive": {
-        "url": "https://codeload.github.com/noeljackson/kata-containers/tar.gz/b70a8f1d1c9aaf2c4812a272fe3ec6fd9a8194d7",
-        "sha256": "7913ed468dfcd71e6329df84e7ef3520307dee108ce29aeb16b54f3f79759de8",
-        "sha512": "186c4d57eb24acd54056cb3699859dd7c3b020585d31f48673a7b750726120abe4093d14f3d200670a50e92d4f259d666f068fba98b1c80c34e7d2baa5703fab"
+        "url": "https://codeload.github.com/noeljackson/kata-containers/tar.gz/08a49558c321f5aabfd9f86621d5e1d2bd0a8e18",
+        "sha256": "a206345b938d9cb3438567869c85603e9fbac47e20b4d30fc5839dc68d40627e",
+        "sha512": "e31bb5967e88801217249057f43d71a36409c2405c7e5d52c2913689513f012549111e38912878f185d91401d380cee83171f0ec2b88c5ac37299dd1a58b607d"
       }
     },
     "trustee": {
       "repository": "https://github.com/noeljackson/trustee",
-      "revision": "24632a8789de9a83a9bf14066b457d249fb1de8c",
-      "tree": "36111a97ec78a24a225594f1d5b4c254953f2d93",
-      "source_date_epoch": 1788004956,
+      "revision": "d8ffc4c95be05af4232bbf0b70d10bc94e0dad0b",
+      "tree": "9ca0cfb6f82322027105376b209eaeb596735c48",
+      "source_date_epoch": 1788361442,
       "archive": {
-        "url": "https://codeload.github.com/noeljackson/trustee/tar.gz/24632a8789de9a83a9bf14066b457d249fb1de8c",
-        "sha256": "713c0337373f0fa9ece71db0efb5cf70afd4111a27bff9b3114227d1281bb6f1",
-        "sha512": "962828a161aa82e5e4670fa3c91e0fb7f7effdeb14277a781d3dd2ac48e5020623d55a3681aec665c702fdb84c0b1438c7a71fc4b7f29075e4b8ea804b4303d3"
+        "url": "https://codeload.github.com/noeljackson/trustee/tar.gz/d8ffc4c95be05af4232bbf0b70d10bc94e0dad0b",
+        "sha256": "df24666c9cb45500daff818a4036790b3d7e51688515c734ae67e985fd2cff94",
+        "sha512": "6ca935fc8b777cd267804f41b1430213b48b32457269444471fc4901fa968a766d1c2c19e5aceab3714ed0c4eda8eb5bd75efbce95b71689f3b991a30042abd1"
       }
+    },
+    "trustee_attestation_service": {
+      "repository": "https://github.com/confidential-containers/trustee",
+      "revision": "6bb2f94d534274489ce41e7023fdd0e559d9f80c",
+      "tree": "df909a1c4fde58d0318ca699edaa2d6b9d7bcc6c",
+      "source_date_epoch": 1784240692,
+      "archive": {
+        "url": "https://codeload.github.com/confidential-containers/trustee/tar.gz/6bb2f94d534274489ce41e7023fdd0e559d9f80c",
+        "sha256": "9c492c73ed659f7970b64612fbe9d1e30d3dad9afe7ebd1e0b6fa9b5327f3c8a",
+        "sha512": "258d110eab12af7bfb69868771517d66b592bf94ca951dd4f307c06602beda83428e6a15df150f84f7e6edd77b2a6f79bda46c5ad4f9792285f076fa3d13a590"
+      }
+    },
+    "trustee_rvps": {
+      "repository": "https://github.com/confidential-containers/trustee",
+      "revision": "258ea4acb7b9bd865fce5c63a539f2120dba8298",
+      "tree": "1d4368226a1d95ff4f30d6e9c5496595632e29cf",
+      "source_date_epoch": 1784216580,
+      "archive": {
+        "url": "https://codeload.github.com/confidential-containers/trustee/tar.gz/258ea4acb7b9bd865fce5c63a539f2120dba8298",
+        "sha256": "28a03820f4dc7b2e38c82146a55ab8c6ac046d8775ce3ec5f48ffc7878922268",
+        "sha512": "154708acaa9598d3fc765bfa166daa9f8ac1d6929d8b10e01fde0f7f62c682a14b1160450249c1330a551de8095f430171e437b85b0386bbfd34ee9e7e7da25e"
+      }
+    }
+  },
+  "builder": {
+    "source": "extensions",
+    "input_tree_sha256": "d8b6275157a4457188db6e8be8df59df40908645ee92778621bce491fa569000",
+    "input_files": {
+      "hack/codewire-confidential-storage/base-rootfs.Dockerfile": "b5d07e12cbee83b0992cca3f2e8dee28bac8655cc96bbc1bb989adcadb70f04e",
+      "hack/codewire-confidential-storage/build.sh": "0474018ffa9672f9e0587d53e862ab51e21d1f2ba1adfca519c03503706f5d7a",
+      "hack/codewire-confidential-storage/extension.Dockerfile": "bf4076833de8e2e4e71e7f6030995962ba30c95acb1dd4de5c7f02ac5616bc35",
+      "hack/codewire-confidential-storage/materials.py": "bc6f70ba5c69954ee4ae0e24c51f05a2dfc7ae501cb3a429eca576d2ecf788c8",
+      "hack/codewire-confidential-storage/qemu-tcg-boot-smoke": "a6543653fb78f9e4fbd46a49ac61cd46f36e1457209b16880ab9715a90439d71"
     }
   },
   "base_images": {
@@ -55,9 +88,53 @@
     "kata_talos_extension": "ghcr.io/noeljackson/kata-containers@sha256:fe31430b386e55bed7bc88464ae3095f1e9ea467a99305db4f4e4cca4acf1d69"
   },
   "trustee_images": {
-    "attestation_service": "ghcr.io/confidential-containers/staged-images/coco-as-grpc@sha256:5319dcb609ed1d61876491bb43be1e03838f29eab7cea5673c7979892dc8015a",
-    "kbs": "ghcr.io/confidential-containers/staged-images/kbs-grpc-as@sha256:873a1e1704965d1325b70fdf31335cc8d9c95acab4f003b0f3ece675b3584dd8",
-    "rvps": "ghcr.io/confidential-containers/staged-images/rvps@sha256:185cdc6754e544de3068a4f9c25733d62e7e6cfb8464da9f2de2ac490573b509"
+    "attestation_service": {
+      "reference": "ghcr.io/confidential-containers/staged-images/coco-as-grpc@sha256:cdbabbb5c2a84f04f6f5e12c6248ae691c444c14f9ab08fc22ba2500e5624b96",
+      "published_tag": "6bb2f94d534274489ce41e7023fdd0e559d9f80c",
+      "platform": "linux/amd64",
+      "platform_manifest": "sha256:659153cfc36c8b9b1e314c1c79f7874475c269a3bee76afb503cf32dafc04268",
+      "source": "trustee_attestation_service",
+      "dockerfile": "attestation-service/docker/as-grpc/Dockerfile",
+      "build_files": {
+        ".github/actions/build-single-image/action.yml": "3be08a7a1ca7fe4f18345e04ac42ca623a3b976558b9d10872a5574e31d95316",
+        ".github/workflows/build-and-push-staged-images.yml": "2d40f4578c24b87562bb8775f6c1950572bed1550a78cefe8a5cd87b81b4ed50",
+        ".github/workflows/workflow-call-build-staged-images-push.yml": "ffc36f6ff6168c5db5dba2b9b75e4cd9886db7a7928189c0ce9535fbf3236338",
+        "attestation-service/docker/as-grpc/Dockerfile": "0fcbcad01ba5a5a479e8bf0a656d790af3c36e07e46752f1f6500c6b1f732f83"
+      },
+      "attestations": {}
+    },
+    "kbs": {
+      "reference": "ghcr.io/noeljackson/staged-images/kbs-grpc-as@sha256:dd8eb5502534363ebf3cdb4b4f52632ba707f09a1194ae641a5164c85664e387",
+      "published_tag": "v0.21.0-path-acl-d8ffc4c95be0",
+      "platform": "linux/amd64",
+      "platform_manifest": "sha256:af8ff2b648d8e7dec42e137141c42bd40987029be1a0affdaa88f143713ed5ff",
+      "source": "trustee",
+      "dockerfile": "kbs/docker/coco-as-grpc/Dockerfile",
+      "build_files": {
+        ".github/workflows/downstream-kbs-grpc-as.yml": "b608227b8d2c24c01681f3bcfec29052da5137af92578af30a3615ebbe6457bf",
+        "kbs/docker/coco-as-grpc/Dockerfile": "bf8d07515cae37ae776a8b9076e67dbebf6278a455acf50e2f94c709132ffe4d"
+      },
+      "attestations": {
+        "manifest": "sha256:ba5adff957451bffb73bfc10e90c7a8d4d65714a620d381cd25e8e5235ac3f45",
+        "provenance": "sha256:3735986ec587727223889829f2a530e31f89c33097937b193cbafe10a1558688",
+        "sbom": "sha256:f96fafc1900745182e2ff1174226f55f37795804eea3556e81a27e0b448e3be4"
+      }
+    },
+    "rvps": {
+      "reference": "ghcr.io/confidential-containers/staged-images/rvps@sha256:185cdc6754e544de3068a4f9c25733d62e7e6cfb8464da9f2de2ac490573b509",
+      "published_tag": "258ea4acb7b9bd865fce5c63a539f2120dba8298",
+      "platform": "linux/amd64",
+      "platform_manifest": "sha256:3c478488eaf1b8a7b6580128ccf960ad4a5e4f000af5c3089c863275a1fea84a",
+      "source": "trustee_rvps",
+      "dockerfile": "rvps/docker/Dockerfile",
+      "build_files": {
+        ".github/actions/build-single-image/action.yml": "3be08a7a1ca7fe4f18345e04ac42ca623a3b976558b9d10872a5574e31d95316",
+        ".github/workflows/build-and-push-staged-images.yml": "2d40f4578c24b87562bb8775f6c1950572bed1550a78cefe8a5cd87b81b4ed50",
+        ".github/workflows/workflow-call-build-staged-images-push.yml": "ffc36f6ff6168c5db5dba2b9b75e4cd9886db7a7928189c0ce9535fbf3236338",
+        "rvps/docker/Dockerfile": "a4ddec7808b6d1fd48c872698b81932f691fb86256d57ab10588a135115c5de8"
+      },
+      "attestations": {}
+    }
   },
   "talos_extensions": {
     "installer_profile": "servernet-confidential-storage-only",
@@ -89,21 +166,36 @@
     "create_container_timeout_seconds": 1350,
     "input_files": {
       "ci/install_libseccomp.sh": "3e0ffc7f8a78b3bb787397abd119a558ff4e3e1ea74383ed3147953ff875b6b4",
-      "src/libs/kata-types/src/confidential_volume.rs": "a6cfeea11dc00c2957bee0e2efdc4ea12ca9c8d905581d669fec8f3f035e9c96",
+      "src/agent/src/confidential_data_hub/mod.rs": "7c391f3d100f3d2c8164a094209f1e9f0e59a7924cc0e2d2b8af86556b081457",
+      "src/agent/src/device/mod.rs": "c73f36052dafe6268eb34bc875f2d00427be5fef7c678d018722ed6a865f617e",
+      "src/agent/src/rpc.rs": "46e78cf3075f905ee296a6f47e7f262de45742ff66f87a5f0e07972595ad1196",
+      "src/agent/src/sandbox.rs": "0038404a4eb0a4374ed126d35eae3afdbc4ed85e344cc2826db511af0b61d318",
+      "src/agent/src/storage/block_handler.rs": "dc4a1ca59496c3ffcdb5a9f0cbaa5f472b40dce91e9c2f3282ccfdede9c3eb84",
+      "src/agent/src/storage/mod.rs": "fa26ed2dbe796626e988be46e249df7bbabbdfeb44f2476d58f1cb186d42ffb0",
+      "src/agent/src/storage/multi_layer_erofs.rs": "84aef812dd9920ddc4d37fdaa837d464f77b4881f296afe2bde8c699d7ce5928",
+      "src/libs/kata-types/src/confidential_volume.rs": "c84bbda361c13ea1f359a53dfac02b88a601b08590d980bd0487b81b6776ea36",
       "src/libs/kata-types/src/lib.rs": "cf4075e806bcc5e2780f813b0b5349995708c6b24051e5c201be396ba5053e13",
-      "src/runtime-rs/crates/resource/src/volume/direct_volume.rs": "4ea84131bff5f21defce7924a0609308dc31644ece2ffa0b4fb45bdada5ba7ba",
-      "src/runtime-rs/crates/resource/src/volume/direct_volumes/rawblock_volume.rs": "97cd4acba3fc9f57594006dbdc15d3f66ed0550b760dd9994ebd45989889f6c6",
-      "src/runtime-rs/crates/resource/src/volume/mod.rs": "4b9629b51a705e1e8b51593502a428df52c88c0823a2e3498187cec8fb380c77",
+      "src/libs/kata-types/src/mount.rs": "89feb96d7011d7d4c6d50f666673d448769f08a5356d73f0dcd46d46295bd890",
+      "src/runtime-rs/crates/resource/src/volume/block_emptydir_volume.rs": "4cc27a0f0562dd86531ac504ad29ad52e4e8493c1e2ca6f31e1dacb5e8a636f0",
+      "src/runtime-rs/crates/resource/src/volume/block_volume.rs": "d0bd39167f9315179d6f144852115f61f6bb6e5ef343f6c744d977a781960aea",
+      "src/runtime-rs/crates/resource/src/volume/direct_volume.rs": "78a63970e3e57db79884509030820d571a9abbd09d0db607168bea745cf18db9",
+      "src/runtime-rs/crates/resource/src/volume/direct_volumes/mod.rs": "ca8e8a1a6b2b3deb965b5708ea4248e18eebb5db4cc8340db75251f4daf050b5",
+      "src/runtime-rs/crates/resource/src/volume/direct_volumes/rawblock_volume.rs": "847451a5457b3015299501346a41fec9192db34136117db53bcc5aef824e4829",
+      "src/runtime-rs/crates/resource/src/volume/mod.rs": "303a4da8e51aa66c5fa66e84e9db989a2d3ba80dfe6aa73c59a6cdd3907a7cd1",
+      "src/runtime-rs/crates/resource/src/volume/utils.rs": "e466594b158c718e7d3d51b60ff652e3c9eddb7ec267fa125ae6497b2ca1a9a3",
       "src/runtime-rs/crates/runtimes/common/src/types/trans_from_shim.rs": "7337e1d98110b6670f1a8a7615f6313df92a7b461ca87b50609deaa5c438c783",
-      "src/runtime-rs/crates/runtimes/virt_container/src/container_manager/confidential_volume.rs": "3f2cdcbb9491661a5696afae10cd39e1df1ad043fc9ec49f7624be602f0ce501",
-      "src/runtime-rs/crates/runtimes/virt_container/src/container_manager/container.rs": "74a1984ef916bfefbd98d4210603fa9884124df2df8e66b96498c784a831daa9",
+      "src/runtime-rs/crates/runtimes/virt_container/src/container_manager/confidential_volume.rs": "f292847715e1311c24b80c490761deab76ddae6ad56f66c688a8bfc8f551c5fa",
+      "src/runtime-rs/crates/runtimes/virt_container/src/container_manager/container.rs": "8380fafe1bd6f46fb348168d3dbe7c6ca87bf6961bfb1035d06e26a9dff49e55",
       "src/runtime-rs/crates/runtimes/virt_container/src/container_manager/mod.rs": "325ac4e8f621d07df62bfde22411678e53b91e09ad163ca09bb5d6ee8ac3bc69",
-      "src/tools/genpolicy/src/policy.rs": "c3a2c44457ccdbb39bb00eac21b977a2fb8a77a9470396121fcd31500ac0324a",
+      "src/tools/genpolicy/rules.rego": "9c3114ae02ab8511d0eda27520d911edbe933eed539121a70592b7e369ac6d55",
+      "src/tools/genpolicy/src/policy.rs": "7eeade585ecdf744a4aee3fee9d6255221b3f031cddf9f4a7735c84ce1646c5e",
       "tools/osbuilder/rootfs-builder/rootfs.sh": "78931320f2fd49918aa0dbb3b7ad744dd0b9c935688222b9ffe7178671f3f32b",
       "tools/osbuilder/rootfs-builder/ubuntu/config.sh": "0f40cd9ee3b6bcf4b456c2bd252df54891e96cee81b9b2066948f2fddfd783ea",
+      "tools/packaging/kata-deploy/Dockerfile.components": "b6828e7e857b2b8dd960d53e8dc5a7953dd9229c0719ca81e54c8e2e5f68dd55",
       "tools/packaging/kata-deploy/local-build/Makefile": "6ce51f2b580e09d77cefd0bd17b04ffaaf9b95aae0a556ff473a512e035f3e50",
       "tools/packaging/kata-deploy/local-build/kata-deploy-binaries.sh": "530769186728607210b6611701202dd5bf4721390e59ebbd257c6d34c9e2822e",
-      "versions.yaml": "83c381c8ec8289ed12ac5ca8749e3219a6df4361aaf069b9461243799fff11f0"
+      "tools/packaging/kata-deploy/local-build/kata-deploy-build-components-tarballs.sh": "12a15b8621af0e7c5476e09987c9e76179d0edce74f0083cc15ff87d8dbf0698",
+      "versions.yaml": "f29e2a4101e142a5e4470bef7b1f6c5811d765d87937f6dd7ee778ff256d0c12"
     },
     "required_packages": [
       "cryptsetup-bin",

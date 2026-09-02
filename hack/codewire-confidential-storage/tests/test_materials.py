@@ -11,6 +11,7 @@ import tarfile
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 SCRIPT_DIR = Path(__file__).resolve().parents[1]
 LOCK_PATH = SCRIPT_DIR / "sources.lock.json"
@@ -29,20 +30,28 @@ class MaterialTests(unittest.TestCase):
     def test_canonical_lock_binds_accepted_sources(self) -> None:
         expected = {
             "extensions": (
-                "60b9cece943a209d84b29f5865a622fa4238ba6f",
-                "e8bd7d056bef8b8f378b966f72c1c41a0964c477",
+                "a71e2a3286f4a71f9dee5e11fe1ae53fa37e724e",
+                "697e7400a3738d8664f3666e2b260d8534cf660f",
             ),
             "guest_components": (
-                "8ca38472db8ac58f29f7166cadda9e8493f9fab1",
-                "6737741f51e87bfaa26f148af64cce84fa204cf0",
+                "60e8f1cec981db876acc9c5616f638adb19eaf85",
+                "b271dcc4169246f9944ed13380b43d68be749708",
             ),
             "kata_containers": (
-                "b70a8f1d1c9aaf2c4812a272fe3ec6fd9a8194d7",
-                "466e2bcf73620d1c13c978215987655246fd8980",
+                "08a49558c321f5aabfd9f86621d5e1d2bd0a8e18",
+                "e8bdfd905aa430e9edbc4a3119e018277c83ed2e",
             ),
             "trustee": (
-                "24632a8789de9a83a9bf14066b457d249fb1de8c",
-                "36111a97ec78a24a225594f1d5b4c254953f2d93",
+                "d8ffc4c95be05af4232bbf0b70d10bc94e0dad0b",
+                "9ca0cfb6f82322027105376b209eaeb596735c48",
+            ),
+            "trustee_attestation_service": (
+                "6bb2f94d534274489ce41e7023fdd0e559d9f80c",
+                "df909a1c4fde58d0318ca699edaa2d6b9d7bcc6c",
+            ),
+            "trustee_rvps": (
+                "258ea4acb7b9bd865fce5c63a539f2120dba8298",
+                "1d4368226a1d95ff4f30d6e9c5496595632e29cf",
             ),
         }
         for name, (revision, tree) in expected.items():
@@ -50,6 +59,9 @@ class MaterialTests(unittest.TestCase):
                 self.assertEqual(self.lock["sources"][name]["revision"], revision)
                 self.assertEqual(self.lock["sources"][name]["tree"], tree)
         self.assertEqual(self.lock["platforms"], ["linux/amd64"])
+        self.assertEqual(
+            self.lock["schema"], "codewire.confidential-storage.sources/v2"
+        )
         self.assertEqual(
             self.lock["kata_build_contract"]["guest_artifact_variant"],
             "ubuntu26.04",
@@ -85,6 +97,29 @@ class MaterialTests(unittest.TestCase):
             "https://codeload.github.com/noeljackson/kata-containers/tar.gz/main"
         )
         with self.assertRaisesRegex(materials.MaterialError, "full Git hash"):
+            materials.validate_lock(changed)
+
+    def test_legacy_lock_and_incomplete_builder_contract_are_rejected(self) -> None:
+        changed = copy.deepcopy(self.lock)
+        changed["schema"] = "codewire.confidential-storage.sources/v1"
+        with self.assertRaisesRegex(materials.MaterialError, "unsupported schema"):
+            materials.validate_lock(changed)
+
+        changed = copy.deepcopy(self.lock)
+        changed["builder"]["input_files"].pop(
+            "hack/codewire-confidential-storage/materials.py"
+        )
+        with self.assertRaisesRegex(materials.MaterialError, "must be exactly"):
+            materials.validate_lock(changed)
+
+        changed = copy.deepcopy(self.lock)
+        changed["builder"]["source"] = "guest_components"
+        with self.assertRaisesRegex(materials.MaterialError, "extensions source"):
+            materials.validate_lock(changed)
+
+        changed = copy.deepcopy(self.lock)
+        changed["builder"]["input_tree_sha256"] = "0" * 64
+        with self.assertRaisesRegex(materials.MaterialError, "tree digest"):
             materials.validate_lock(changed)
 
     def test_archive_url_must_resolve_exact_revision(self) -> None:
@@ -123,12 +158,36 @@ class MaterialTests(unittest.TestCase):
         with self.assertRaisesRegex(materials.MaterialError, "headroom above"):
             materials.validate_lock(changed)
 
-    def test_digest_only_images_and_servernet_profile_are_required(self) -> None:
+    def test_provenanced_images_and_servernet_profile_are_required(self) -> None:
         changed = copy.deepcopy(self.lock)
-        changed["trustee_images"]["kbs"] = (
+        changed["trustee_images"]["kbs"]["reference"] = (
             "ghcr.io/confidential-containers/staged-images/kbs-grpc-as:latest"
         )
-        with self.assertRaisesRegex(materials.MaterialError, "digest reference"):
+        with self.assertRaisesRegex(materials.MaterialError, "immutable digest"):
+            materials.validate_lock(changed)
+        changed = copy.deepcopy(self.lock)
+        changed["trustee_images"]["kbs"] = self.lock["trustee_images"]["kbs"][
+            "reference"
+        ]
+        with self.assertRaisesRegex(
+            materials.MaterialError, "source and build evidence"
+        ):
+            materials.validate_lock(changed)
+        changed = copy.deepcopy(self.lock)
+        changed["trustee_images"]["kbs"]["published_tag"] = "latest"
+        with self.assertRaisesRegex(
+            materials.MaterialError, "bind its source revision"
+        ):
+            materials.validate_lock(changed)
+        changed = copy.deepcopy(self.lock)
+        changed["trustee_images"]["kbs"]["source"] = "trustee_rvps"
+        with self.assertRaisesRegex(materials.MaterialError, "must use source trustee"):
+            materials.validate_lock(changed)
+        changed = copy.deepcopy(self.lock)
+        changed["trustee_images"]["kbs"]["attestations"].pop("provenance")
+        with self.assertRaisesRegex(
+            materials.MaterialError, "attestations keys differ"
+        ):
             materials.validate_lock(changed)
         changed = copy.deepcopy(self.lock)
         changed["talos_extensions"]["installer_profile"] = "all-nodes"
@@ -140,6 +199,145 @@ class MaterialTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(materials.MaterialError, "exact Docker Hub digest"):
             materials.validate_lock(changed)
+
+    def test_builder_checkout_is_bound_to_the_exact_input_tree(self) -> None:
+        repo = SCRIPT_DIR.parents[1]
+        materials.verify_builder(self.lock, repo)
+        changed = copy.deepcopy(self.lock)
+        changed["builder"]["input_files"][
+            "hack/codewire-confidential-storage/build.sh"
+        ] = "0" * 64
+        with self.assertRaisesRegex(materials.MaterialError, "input drift"):
+            materials.verify_builder(changed, repo)
+
+    def test_trustee_publication_oracle_rejects_tag_or_attestation_drift(
+        self,
+    ) -> None:
+        image = self.lock["trustee_images"]["kbs"]
+        repository = image["reference"].split("@", 1)[0]
+        index = {
+            "manifests": [
+                {
+                    "digest": image["platform_manifest"],
+                    "platform": {"architecture": "amd64", "os": "linux"},
+                },
+                {
+                    "digest": image["attestations"]["manifest"],
+                    "annotations": {
+                        "vnd.docker.reference.type": "attestation-manifest"
+                    },
+                    "platform": {"architecture": "unknown", "os": "unknown"},
+                },
+            ]
+        }
+        attestation = {
+            "layers": [
+                {
+                    "digest": image["attestations"]["sbom"],
+                    "annotations": {
+                        "in-toto.io/predicate-type": "https://spdx.dev/Document"
+                    },
+                },
+                {
+                    "digest": image["attestations"]["provenance"],
+                    "annotations": {
+                        "in-toto.io/predicate-type": "https://slsa.dev/provenance/v1"
+                    },
+                },
+            ]
+        }
+        provenance = {
+            "subject": [
+                {
+                    "digest": {
+                        "sha256": image["platform_manifest"].removeprefix("sha256:")
+                    }
+                }
+            ],
+            "predicateType": "https://slsa.dev/provenance/v1",
+            "predicate": {
+                "buildDefinition": {
+                    "externalParameters": {
+                        "request": {
+                            "root": {
+                                "request": {
+                                    "args": {
+                                        "vcs:revision": self.lock["sources"]["trustee"][
+                                            "revision"
+                                        ],
+                                        "vcs:source": self.lock["sources"]["trustee"][
+                                            "repository"
+                                        ],
+                                        "vcs:localdir:dockerfile": "kbs/docker/coco-as-grpc",
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "internalParameters": {
+                        "github_repository": "noeljackson/trustee",
+                        "github_workflow_sha": self.lock["sources"]["trustee"][
+                            "revision"
+                        ],
+                        "github_workflow_ref": "noeljackson/trustee/.github/workflows/downstream-kbs-grpc-as.yml@refs/heads/downstream/confidential-storage",
+                        "github_ref": "refs/heads/downstream/confidential-storage",
+                        "github_event_name": "push",
+                    },
+                }
+            },
+        }
+
+        def valid_skopeo(*arguments: str) -> str:
+            if "--format" in arguments:
+                return image["reference"].split("@", 1)[1]
+            reference = arguments[-1].removeprefix("docker://")
+            if reference == image["reference"]:
+                return json.dumps(index)
+            if reference == f"{repository}@{image['attestations']['manifest']}":
+                return json.dumps(attestation)
+            raise AssertionError(reference)
+
+        with (
+            mock.patch.object(materials, "run_skopeo", side_effect=valid_skopeo),
+            mock.patch.object(materials, "oras_blob", return_value=provenance),
+        ):
+            materials.verify_trustee_image_publication(self.lock, "kbs")
+
+        with mock.patch.object(
+            materials, "run_skopeo", return_value="sha256:" + "0" * 64
+        ):
+            with self.assertRaisesRegex(materials.MaterialError, "tag digest mismatch"):
+                materials.verify_trustee_image_publication(self.lock, "kbs")
+
+        drifted_attestation = copy.deepcopy(attestation)
+        drifted_attestation["layers"][1]["digest"] = "sha256:" + "0" * 64
+
+        def drifted_skopeo(*arguments: str) -> str:
+            value = valid_skopeo(*arguments)
+            reference = arguments[-1].removeprefix("docker://")
+            if reference == f"{repository}@{image['attestations']['manifest']}":
+                return json.dumps(drifted_attestation)
+            return value
+
+        with (
+            mock.patch.object(materials, "run_skopeo", side_effect=drifted_skopeo),
+            mock.patch.object(materials, "oras_blob", return_value=provenance),
+        ):
+            with self.assertRaisesRegex(materials.MaterialError, "provenance.*drifted"):
+                materials.verify_trustee_image_publication(self.lock, "kbs")
+
+        drifted_provenance = copy.deepcopy(provenance)
+        drifted_provenance["predicate"]["buildDefinition"]["internalParameters"][
+            "github_workflow_sha"
+        ] = "0" * 40
+        with (
+            mock.patch.object(materials, "run_skopeo", side_effect=valid_skopeo),
+            mock.patch.object(materials, "oras_blob", return_value=drifted_provenance),
+        ):
+            with self.assertRaisesRegex(
+                materials.MaterialError, "source identity drifted"
+            ):
+                materials.verify_trustee_image_publication(self.lock, "kbs")
 
     def test_secret_named_fields_are_rejected(self) -> None:
         changed = copy.deepcopy(self.lock)
@@ -182,8 +380,7 @@ class MaterialTests(unittest.TestCase):
                     'PACKAGES="base"\nPACKAGES+=" cryptsetup-bin e2fsprogs"\n'
                 ),
                 "tools/osbuilder/rootfs-builder/rootfs.sh": (
-                    'dns_file="${ROOTFS_DIR}/etc/resolv.conf"\n'
-                    ': > "${dns_file}"\n'
+                    'dns_file="${ROOTFS_DIR}/etc/resolv.conf"\n: > "${dns_file}"\n'
                 ),
                 "src/runtime-rs/crates/runtimes/common/src/types/trans_from_shim.rs": (
                     "// sandbox DNS formatter fixture\n"
@@ -241,8 +438,7 @@ class MaterialTests(unittest.TestCase):
             )
             rootfs_builder = output / "tools/osbuilder/rootfs-builder/rootfs.sh"
             rootfs_builder.write_text(
-                'dns_file="${ROOTFS_DIR}/etc/resolv.conf"\n'
-                'touch "${dns_file}"\n',
+                'dns_file="${ROOTFS_DIR}/etc/resolv.conf"\ntouch "${dns_file}"\n',
                 encoding="utf-8",
             )
             with self.assertRaisesRegex(
@@ -347,7 +543,35 @@ class MaterialTests(unittest.TestCase):
                 )
                 text = (first / name).read_text(encoding="utf-8")
                 self.assertNotRegex(text.lower(), r"password|private_key|admin_token")
-                self.assertIn("b70a8f1d1c9aaf2c4812a272fe3ec6fd9a8194d7", text)
+                self.assertIn("08a49558c321f5aabfd9f86621d5e1d2bd0a8e18", text)
+            provenance = json.loads(
+                (first / "provenance.in-toto.json").read_text(encoding="utf-8")
+            )
+            dependencies = provenance["predicate"]["buildDefinition"][
+                "resolvedDependencies"
+            ]
+            kbs = next(
+                dependency
+                for dependency in dependencies
+                if dependency.get("annotations", {}).get("component") == "trustee-kbs"
+                and dependency.get("annotations", {}).get("role") is None
+            )
+            self.assertEqual(
+                kbs["annotations"]["sourceRevision"],
+                "d8ffc4c95be05af4232bbf0b70d10bc94e0dad0b",
+            )
+            self.assertEqual(
+                kbs["annotations"]["provenanceAttestation"],
+                "sha256:3735986ec587727223889829f2a530e31f89c33097937b193cbafe10a1558688",
+            )
+            self.assertTrue(
+                any(
+                    dependency.get("annotations", {}).get("role") == "build-recipe"
+                    and dependency.get("annotations", {}).get("component")
+                    == "trustee-kbs"
+                    for dependency in dependencies
+                )
+            )
 
     def test_oci_subject_uses_platform_manifest_and_checks_attestations(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -419,20 +643,18 @@ class MaterialTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             invalid_entries = self._kata_extension_entries()
-            invalid_entries["manifest.yaml"] = b'''\
+            invalid_entries["manifest.yaml"] = b"""\
 version: v1alpha1
 metadata:
   name: kata-containers
   version: "4.0.0"
-'''
+"""
             invalid, _ = self._write_oci_archive(
                 root / "invalid",
                 component="kata-extension",
                 layer_entries=invalid_entries,
             )
-            with self.assertRaisesRegex(
-                materials.MaterialError, "locked Kata version"
-            ):
+            with self.assertRaisesRegex(materials.MaterialError, "locked Kata version"):
                 materials.verify_oci_image(
                     LOCK_PATH, self.lock, "kata-extension", invalid
                 )
@@ -443,16 +665,12 @@ metadata:
             for name, shim, expected in (
                 (
                     "interp",
-                    self._elf_with_program_segment(
-                        3, b"/lib64/ld-linux-x86-64.so.2\0"
-                    ),
+                    self._elf_with_program_segment(3, b"/lib64/ld-linux-x86-64.so.2\0"),
                     "PT_INTERP",
                 ),
                 (
                     "needed",
-                    self._elf_with_program_segment(
-                        2, struct.pack("<QQQQ", 1, 0, 0, 0)
-                    ),
+                    self._elf_with_program_segment(2, struct.pack("<QQQQ", 1, 0, 0, 0)),
                     "DT_NEEDED",
                 ),
             ):
@@ -516,7 +734,7 @@ metadata:
             wrong_path_entries = self._kata_extension_entries()
             wrong_path_entries[
                 "rootfs/usr/local/share/kata-containers/configuration-qemu-snp.toml"
-            ] = b'''\
+            ] = b"""\
 [hypervisor.qemu]
 image = "/usr/local/share/kata-containers/kata-containers-confidential.img"
 kernel_verity_params = "root_hash=cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc,salt=dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd,data_blocks=2,data_block_size=4096,hash_block_size=4096"
@@ -527,7 +745,7 @@ enable_annotations = ["enable_iommu", "kernel_params", "kernel_verity_params", "
 name = "coco"
 path = "/usr/local/share/kata-containers/not-the-coco-image.img"
 verity_params = "root_hash=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,salt=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb,data_blocks=1,data_block_size=4096,hash_block_size=4096"
-'''
+"""
             wrong_path, _ = self._write_oci_archive(
                 root / "wrong-path",
                 component="kata-extension",
@@ -546,9 +764,7 @@ verity_params = "root_hash=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
                 "rootfs/usr/local/share/kata-containers/configuration-qemu-snp.toml"
             ] = shared_root_entries[
                 "rootfs/usr/local/share/kata-containers/configuration-qemu-snp.toml"
-            ].replace(
-                b"kata-containers-confidential.img", b"kata-containers.img"
-            )
+            ].replace(b"kata-containers-confidential.img", b"kata-containers.img")
             shared_root, _ = self._write_oci_archive(
                 root / "shared-root",
                 component="kata-extension",
@@ -567,8 +783,7 @@ verity_params = "root_hash=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             config_name = (
-                "rootfs/usr/local/share/kata-containers/"
-                "configuration-qemu-snp.toml"
+                "rootfs/usr/local/share/kata-containers/configuration-qemu-snp.toml"
             )
             for name, replacement in (
                 ("missing-shared-fs", b""),
@@ -647,7 +862,7 @@ verity_params = "root_hash=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
                 (
                     "coco-mismatch",
                     coco_params,
-                    b"verity_params = \"root_hash=cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc,salt=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb,data_blocks=1,data_block_size=4096,hash_block_size=4096\"",
+                    b'verity_params = "root_hash=cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc,salt=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb,data_blocks=1,data_block_size=4096,hash_block_size=4096"',
                     "CoCo verity params do not match its root hash",
                 ),
                 (
@@ -659,7 +874,7 @@ verity_params = "root_hash=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
                 (
                     "confidential-mismatch",
                     confidential_params,
-                    b"kernel_verity_params = \"root_hash=eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee,salt=dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd,data_blocks=2,data_block_size=4096,hash_block_size=4096\"",
+                    b'kernel_verity_params = "root_hash=eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee,salt=dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd,data_blocks=2,data_block_size=4096,hash_block_size=4096"',
                     "confidential root verity params do not match its root hash",
                 ),
             ):
@@ -669,7 +884,9 @@ verity_params = "root_hash=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
                         "rootfs/usr/local/share/kata-containers/"
                         "configuration-qemu-snp.toml"
                     )
-                    entries[config_name] = entries[config_name].replace(needle, replacement)
+                    entries[config_name] = entries[config_name].replace(
+                        needle, replacement
+                    )
                     archive, _ = self._write_oci_archive(
                         root / name,
                         component="kata-extension",
@@ -686,7 +903,7 @@ verity_params = "root_hash=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
             legacy_config_entries = self._kata_extension_entries()
             legacy_config_entries[
                 "rootfs/usr/local/share/kata-containers/configuration.toml"
-            ] = b'''\
+            ] = b"""\
 [hypervisor.clh]
 path = "/usr/local/bin/cloud-hypervisor"
 valid_hypervisor_paths = ["/usr/local/bin/cloud-hypervisor"]
@@ -697,7 +914,7 @@ dial_timeout = 45
 [runtime]
 hypervisor_name = "clh"
 agent_name = "kata"
-'''
+"""
             legacy_config, _ = self._write_oci_archive(
                 root / "legacy-config",
                 component="kata-extension",
@@ -713,20 +930,18 @@ agent_name = "kata"
     def test_talos_extension_tree_has_exact_top_level_contract(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            valid_manifest = '''\
+            valid_manifest = """\
 version: v1alpha1
 metadata:
   name: kata-containers
   version: "4.1.0"
-'''
+"""
             stale_manifest = valid_manifest.replace('"4.1.0"', '"4.0.0"')
             (root / "manifest.yaml").write_text(valid_manifest)
             (root / "rootfs").mkdir()
             materials.verify_talos_extension_tree(root, "4.1.0")
             (root / "manifest.yaml").write_text(stale_manifest)
-            with self.assertRaisesRegex(
-                materials.MaterialError, "locked Kata version"
-            ):
+            with self.assertRaisesRegex(materials.MaterialError, "locked Kata version"):
                 materials.verify_talos_extension_tree(root, "4.1.0")
             (root / "manifest.yaml").write_text(valid_manifest)
             (root / ".dockerenv").touch()
@@ -737,6 +952,19 @@ metadata:
 
     def test_build_recipe_has_no_publication_path(self) -> None:
         recipe = (SCRIPT_DIR / "build.sh").read_text(encoding="utf-8")
+        for command in (
+            "fetch-archives",
+            "verify-trustee-sources",
+            "verify-trustee-publications",
+            "plan",
+            "prepare-kata",
+            "kata-static",
+            "kata-guest-components",
+            "verify-kata-static",
+            "kata-extension",
+        ):
+            command_body = recipe.split(f"  {command})", 1)[1].split(";;", 1)[0]
+            self.assertIn("verify_builder_checkout", command_body, command)
         self.assertNotIn(" --push", recipe)
         self.assertNotIn("docker login", recipe)
         self.assertNotIn("GITHUB_TOKEN", recipe)
@@ -789,8 +1017,12 @@ metadata:
             recipe,
         )
         self.assertIn("--no-cache", recipe)
-        parallel_targets = recipe.split("kata_parallel_targets=(", 1)[1].split(")", 1)[0]
-        post_image_targets = recipe.split("kata_post_image_targets=(", 1)[1].split(")", 1)[0]
+        parallel_targets = recipe.split("kata_parallel_targets=(", 1)[1].split(")", 1)[
+            0
+        ]
+        post_image_targets = recipe.split("kata_post_image_targets=(", 1)[1].split(
+            ")", 1
+        )[0]
         self.assertNotIn("shim-v2-rust-tarball", parallel_targets)
         self.assertIn("shim-v2-rust-tarball", post_image_targets)
         self.assertLess(
@@ -804,7 +1036,7 @@ metadata:
         self.assertIn("qemu-snp-experimental-tarball", recipe)
         self.assertIn("sfdisk --json", recipe)
         self.assertIn("QEMU-SNP annotation allowlist is not exact", recipe)
-        self.assertIn('grep -Eq \'^shared_fs = "none"$\'', recipe)
+        self.assertIn("grep -Eq '^shared_fs = \"none\"$'", recipe)
 
         smoke = (SCRIPT_DIR / "qemu-tcg-boot-smoke").read_text(encoding="utf-8")
         self.assertIn("console=ttyS0,115200", smoke)
@@ -1006,19 +1238,19 @@ metadata:
 
     def _kata_extension_entries(self) -> dict[str, bytes | None]:
         return {
-            "manifest.yaml": b'''\
+            "manifest.yaml": b"""\
 version: v1alpha1
 metadata:
   name: kata-containers
   version: "4.1.0"
-''',
+""",
             "rootfs": None,
             "rootfs/usr/local/bin/containerd-shim-kata-qemu-snp-v2": b"shim",
             "rootfs/usr/local/bin/containerd-shim-kata-v2": self._static_amd64_elf(),
             "rootfs/usr/local/bin/kata-ctl": b"kata-ctl",
             "rootfs/usr/local/share/codewire/confidential-storage/materials.spdx.json": b"{}\n",
             "rootfs/usr/local/share/codewire/confidential-storage/provenance.in-toto.json": b"{}\n",
-            "rootfs/usr/local/share/kata-containers/configuration.toml": b'''\
+            "rootfs/usr/local/share/kata-containers/configuration.toml": b"""\
 [hypervisor.clh]
 path = "/usr/local/bin/cloud-hypervisor"
 valid_hypervisor_paths = ["/usr/local/bin/cloud-hypervisor"]
@@ -1029,8 +1261,8 @@ dial_timeout_ms = 10
 [runtime]
 hypervisor_name = "clh"
 agent_name = "kata"
-''',
-            "rootfs/usr/local/share/kata-containers/configuration-qemu-snp.toml": b'''\
+""",
+            "rootfs/usr/local/share/kata-containers/configuration-qemu-snp.toml": b"""\
 [hypervisor.qemu]
 image = "/usr/local/share/kata-containers/kata-containers-confidential.img"
 kernel_verity_params = "root_hash=cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc,salt=dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd,data_blocks=2,data_block_size=4096,hash_block_size=4096"
@@ -1041,7 +1273,7 @@ enable_annotations = ["enable_iommu", "kernel_params", "kernel_verity_params", "
 name = "coco"
 path = "/usr/local/share/kata-containers/kata-containers-coco-extension.img"
 verity_params = "root_hash=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,salt=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb,data_blocks=1,data_block_size=4096,hash_block_size=4096"
-''',
+""",
             "rootfs/usr/local/share/kata-containers/kata-containers.img": b"commodity-image",
             "rootfs/usr/local/share/kata-containers/kata-containers-confidential.img": b"image",
             "rootfs/usr/local/share/kata-containers/kata-containers-coco-extension.img": b"coco-image",

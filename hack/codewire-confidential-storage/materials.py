@@ -21,19 +21,45 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
-SCHEMA = "codewire.confidential-storage.sources/v1"
+SCHEMA = "codewire.confidential-storage.sources/v2"
 SOURCE_NAMES = {
     "extensions",
     "guest_components",
     "kata_containers",
     "trustee",
+    "trustee_attestation_service",
+    "trustee_rvps",
 }
 TRUSTEE_IMAGE_NAMES = {"attestation_service", "kbs", "rvps"}
+TRUSTEE_IMAGE_SOURCES = {
+    "attestation_service": "trustee_attestation_service",
+    "kbs": "trustee",
+    "rvps": "trustee_rvps",
+}
+TRUSTEE_IMAGE_REPOSITORIES = {
+    "attestation_service": "ghcr.io/confidential-containers/staged-images/coco-as-grpc",
+    "kbs": "ghcr.io/noeljackson/staged-images/kbs-grpc-as",
+    "rvps": "ghcr.io/confidential-containers/staged-images/rvps",
+}
+TRUSTEE_IMAGE_DOCKERFILES = {
+    "attestation_service": "attestation-service/docker/as-grpc/Dockerfile",
+    "kbs": "kbs/docker/coco-as-grpc/Dockerfile",
+    "rvps": "rvps/docker/Dockerfile",
+}
+BUILDER_INPUT_FILES = {
+    "hack/codewire-confidential-storage/base-rootfs.Dockerfile",
+    "hack/codewire-confidential-storage/build.sh",
+    "hack/codewire-confidential-storage/extension.Dockerfile",
+    "hack/codewire-confidential-storage/materials.py",
+    "hack/codewire-confidential-storage/qemu-tcg-boot-smoke",
+}
 TALOS_EXTENSION_NAMES = ["iscsi-tools", "util-linux-tools"]
 FULL_HASH = re.compile(r"^[0-9a-f]{40}$")
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
 SHA512 = re.compile(r"^[0-9a-f]{128}$")
+SHA256_DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
 OCI_DIGEST = re.compile(r"^(?:docker\.io|ghcr\.io)/[a-z0-9./_-]+@sha256:[0-9a-f]{64}$")
+OCI_TAG = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9._-]{0,127}$")
 SECRET_FIELD = re.compile(
     r"(^|_)(credential|password|private_key|secret|token)($|_)", re.IGNORECASE
 )
@@ -139,6 +165,93 @@ def validate_source(name: str, source: dict[str, Any]) -> None:
         raise MaterialError(f"source {name} archive sha512 is invalid")
 
 
+def validate_trustee_image(name: str, image: Any, sources: dict[str, Any]) -> None:
+    if not isinstance(image, dict):
+        raise MaterialError(f"Trustee image {name} must bind source and build evidence")
+    require_keys(
+        image,
+        {
+            "reference",
+            "published_tag",
+            "platform",
+            "platform_manifest",
+            "source",
+            "dockerfile",
+            "build_files",
+            "attestations",
+        },
+        f"Trustee image {name}",
+    )
+
+    reference = image["reference"]
+    if not isinstance(reference, str) or not OCI_DIGEST.fullmatch(reference):
+        raise MaterialError(
+            f"Trustee image {name} must use an immutable digest reference"
+        )
+    repository, _ = reference.split("@", 1)
+    if repository != TRUSTEE_IMAGE_REPOSITORIES[name]:
+        raise MaterialError(
+            f"Trustee image {name} repository is not the accepted package"
+        )
+
+    source_name = image["source"]
+    if source_name != TRUSTEE_IMAGE_SOURCES[name]:
+        raise MaterialError(
+            f"Trustee image {name} must use source {TRUSTEE_IMAGE_SOURCES[name]}"
+        )
+    source = sources[source_name]
+    published_tag = image["published_tag"]
+    if not isinstance(published_tag, str) or not OCI_TAG.fullmatch(published_tag):
+        raise MaterialError(f"Trustee image {name} publication tag is invalid")
+    expected_tag = source["revision"]
+    if name == "kbs":
+        expected_tag = f"v0.21.0-path-acl-{source['revision'][:12]}"
+    if published_tag != expected_tag:
+        raise MaterialError(
+            f"Trustee image {name} publication tag does not bind its source revision"
+        )
+
+    if image["platform"] != "linux/amd64":
+        raise MaterialError(f"Trustee image {name} must bind the linux/amd64 platform")
+    if not isinstance(image["platform_manifest"], str) or not SHA256_DIGEST.fullmatch(
+        image["platform_manifest"]
+    ):
+        raise MaterialError(f"Trustee image {name} platform manifest is invalid")
+
+    dockerfile = image["dockerfile"]
+    if dockerfile != TRUSTEE_IMAGE_DOCKERFILES[name]:
+        raise MaterialError(
+            f"Trustee image {name} Dockerfile is not the accepted recipe"
+        )
+    validate_input_files(image["build_files"], f"Trustee image {name}")
+    if dockerfile not in image["build_files"]:
+        raise MaterialError(f"Trustee image {name} does not hash its Dockerfile")
+
+    attestations = image["attestations"]
+    if not isinstance(attestations, dict):
+        raise MaterialError(f"Trustee image {name} attestations must be an object")
+    if name == "kbs":
+        require_keys(
+            attestations,
+            {"manifest", "provenance", "sbom"},
+            "Trustee image kbs attestations",
+        )
+        for attestation_name, digest in attestations.items():
+            if not isinstance(digest, str) or not SHA256_DIGEST.fullmatch(digest):
+                raise MaterialError(
+                    f"Trustee image kbs {attestation_name} attestation is invalid"
+                )
+    elif attestations:
+        raise MaterialError(
+            f"Trustee image {name} must not claim unavailable embedded attestations"
+        )
+
+
+def input_tree_digest(input_files: dict[str, str]) -> str:
+    payload = json.dumps(input_files, sort_keys=True, separators=(",", ":")).encode()
+    return hashlib.sha256(payload).hexdigest()
+
+
 def validate_lock(lock: dict[str, Any]) -> None:
     validate_no_secret_fields(lock)
     require_keys(
@@ -148,6 +261,7 @@ def validate_lock(lock: dict[str, Any]) -> None:
             "platforms",
             "source_date_epoch",
             "sources",
+            "builder",
             "base_images",
             "trustee_images",
             "talos_extensions",
@@ -172,6 +286,20 @@ def validate_lock(lock: dict[str, Any]) -> None:
         raise MaterialError(
             "source_date_epoch must equal the newest locked source epoch"
         )
+
+    builder = lock["builder"]
+    if not isinstance(builder, dict):
+        raise MaterialError("builder must be an object")
+    require_keys(builder, {"source", "input_files", "input_tree_sha256"}, "builder")
+    if builder["source"] != "extensions":
+        raise MaterialError("builder must use the locked extensions source")
+    validate_input_files(builder["input_files"], "builder")
+    if set(builder["input_files"]) != BUILDER_INPUT_FILES:
+        raise MaterialError(
+            f"builder input_files must be exactly {sorted(BUILDER_INPUT_FILES)}"
+        )
+    if builder["input_tree_sha256"] != input_tree_digest(builder["input_files"]):
+        raise MaterialError("builder input tree digest does not match its files")
 
     base_images = lock["base_images"]
     if not isinstance(base_images, dict):
@@ -202,9 +330,8 @@ def validate_lock(lock: dict[str, Any]) -> None:
         raise MaterialError(
             f"trustee_images must be exactly {sorted(TRUSTEE_IMAGE_NAMES)}"
         )
-    for name, reference in trustee_images.items():
-        if not isinstance(reference, str) or not OCI_DIGEST.fullmatch(reference):
-            raise MaterialError(f"Trustee image {name} must be a GHCR digest reference")
+    for name, image in trustee_images.items():
+        validate_trustee_image(name, image, sources)
 
     talos = lock["talos_extensions"]
     if not isinstance(talos, dict):
@@ -261,18 +388,17 @@ def validate_lock(lock: dict[str, Any]) -> None:
         raise MaterialError(
             "Kata guest artifact variant must select the fixed Ubuntu 26.04 image"
         )
-    if not isinstance(kata["kata_version"], str) or re.fullmatch(
-        r"[0-9]+\.[0-9]+\.[0-9]+", kata["kata_version"]
-    ) is None:
+    if (
+        not isinstance(kata["kata_version"], str)
+        or re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", kata["kata_version"]) is None
+    ):
         raise MaterialError("Kata version must be an exact semantic version")
     if kata["qemu_snp_overhead_memory_mib"] != 2048:
         raise MaterialError(
             "Kata QEMU-SNP guest overhead must remain the locked 2048 MiB budget"
         )
     if kata["persistent_volume_max_gib"] != 50:
-        raise MaterialError(
-            "Kata persistent-volume contract must be bounded to 50 GiB"
-        )
+        raise MaterialError("Kata persistent-volume contract must be bounded to 50 GiB")
     if kata["cdh_api_timeout_seconds"] != 1200:
         raise MaterialError(
             "Kata CDH API timeout must match the bounded 50 GiB initialization contract"
@@ -306,6 +432,7 @@ def validate_lock(lock: dict[str, Any]) -> None:
             raise MaterialError(
                 f"guest tool {name} must have two absolute path candidates"
             )
+
 
 def validate_input_files(value: Any, context: str) -> None:
     if not isinstance(value, dict) or not value:
@@ -394,6 +521,238 @@ def verify_file_contract(repo: Path, input_files: dict[str, str], context: str) 
             raise MaterialError(
                 f"{context} input drift for {relative}: expected {expected}, got {actual}"
             )
+
+
+def git_file_bytes(repo: Path, revision: str, relative: str) -> bytes:
+    try:
+        process = subprocess.run(
+            ["git", "-C", os.fspath(repo), "show", f"{revision}:{relative}"],
+            check=True,
+            capture_output=True,
+        )
+    except subprocess.CalledProcessError as error:
+        detail = error.stderr.decode(errors="replace").strip()
+        raise MaterialError(
+            f"Git source {revision} is missing build input {relative}: {detail}"
+        ) from error
+    return process.stdout
+
+
+def verify_revision_file_contract(
+    repo: Path,
+    source: dict[str, Any],
+    input_files: dict[str, str],
+    context: str,
+) -> None:
+    actual_tree = run_git(repo, "rev-parse", f"{source['revision']}^{{tree}}")
+    if actual_tree != source["tree"]:
+        raise MaterialError(
+            f"{context} source tree mismatch: expected {source['tree']}, got {actual_tree}"
+        )
+    for relative, expected in sorted(input_files.items()):
+        actual = hashlib.sha256(
+            git_file_bytes(repo, source["revision"], relative)
+        ).hexdigest()
+        if actual != expected:
+            raise MaterialError(
+                f"{context} source input drift for {relative}: "
+                f"expected {expected}, got {actual}"
+            )
+
+
+def verify_builder(lock: dict[str, Any], repo: Path) -> None:
+    builder = lock["builder"]
+    verify_file_contract(repo, builder["input_files"], "extension builder checkout")
+
+
+def verify_trustee_image_source(
+    lock: dict[str, Any], component: str, repo: Path
+) -> None:
+    if component not in lock["trustee_images"]:
+        raise MaterialError(f"unknown Trustee image component: {component}")
+    image = lock["trustee_images"][component]
+    source = lock["sources"][image["source"]]
+    verify_revision_file_contract(
+        repo, source, image["build_files"], f"Trustee image {component}"
+    )
+    accepted_revision = lock["sources"]["trustee"]["revision"]
+    if source["revision"] != accepted_revision:
+        process = subprocess.run(
+            [
+                "git",
+                "-C",
+                os.fspath(repo),
+                "merge-base",
+                "--is-ancestor",
+                source["revision"],
+                accepted_revision,
+            ],
+            capture_output=True,
+        )
+        if process.returncode != 0:
+            raise MaterialError(
+                f"Trustee image {component} source is not in the accepted Trustee history"
+            )
+
+
+def run_skopeo(*arguments: str) -> str:
+    try:
+        process = subprocess.run(
+            ["skopeo", *arguments],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except FileNotFoundError as error:
+        raise MaterialError(
+            "skopeo is required to verify Trustee publications"
+        ) from error
+    except subprocess.CalledProcessError as error:
+        detail = error.stderr.strip() or error.stdout.strip()
+        raise MaterialError(f"skopeo {' '.join(arguments)} failed: {detail}") from error
+    return process.stdout.strip()
+
+
+def skopeo_raw(reference: str) -> dict[str, Any]:
+    try:
+        value = json.loads(run_skopeo("inspect", "--raw", f"docker://{reference}"))
+    except json.JSONDecodeError as error:
+        raise MaterialError(
+            f"registry returned invalid manifest JSON for {reference}"
+        ) from error
+    if not isinstance(value, dict):
+        raise MaterialError(f"registry returned a non-object manifest for {reference}")
+    return value
+
+
+def oras_blob(reference: str) -> dict[str, Any]:
+    try:
+        process = subprocess.run(
+            ["oras", "blob", "fetch", "--output", "-", reference],
+            check=True,
+            capture_output=True,
+        )
+    except FileNotFoundError as error:
+        raise MaterialError("oras is required to verify KBS provenance") from error
+    except subprocess.CalledProcessError as error:
+        detail = error.stderr.decode(errors="replace").strip()
+        raise MaterialError(
+            f"oras blob fetch failed for {reference}: {detail}"
+        ) from error
+    try:
+        value = json.loads(process.stdout)
+    except json.JSONDecodeError as error:
+        raise MaterialError(
+            f"registry returned invalid provenance for {reference}"
+        ) from error
+    if not isinstance(value, dict):
+        raise MaterialError(f"registry returned non-object provenance for {reference}")
+    return value
+
+
+def verify_trustee_image_publication(lock: dict[str, Any], component: str) -> None:
+    if component not in lock["trustee_images"]:
+        raise MaterialError(f"unknown Trustee image component: {component}")
+    image = lock["trustee_images"][component]
+    repository, expected_digest = image["reference"].split("@", 1)
+    tag_reference = f"{repository}:{image['published_tag']}"
+    actual_digest = run_skopeo(
+        "inspect", "--format", "{{.Digest}}", f"docker://{tag_reference}"
+    )
+    if actual_digest != expected_digest:
+        raise MaterialError(
+            f"Trustee image {component} tag digest mismatch: "
+            f"expected {expected_digest}, got {actual_digest}"
+        )
+
+    index = skopeo_raw(image["reference"])
+    manifests = index.get("manifests")
+    if not isinstance(manifests, list):
+        raise MaterialError(f"Trustee image {component} is not a manifest index")
+    platform_matches = [
+        manifest
+        for manifest in manifests
+        if isinstance(manifest, dict)
+        and manifest.get("platform") == {"architecture": "amd64", "os": "linux"}
+    ]
+    if len(platform_matches) != 1:
+        raise MaterialError(
+            f"Trustee image {component} does not have one linux/amd64 manifest"
+        )
+    if platform_matches[0].get("digest") != image["platform_manifest"]:
+        raise MaterialError(f"Trustee image {component} platform manifest drifted")
+
+    if component != "kbs":
+        return
+    attestation_manifest = image["attestations"]["manifest"]
+    if not any(
+        isinstance(manifest, dict)
+        and manifest.get("digest") == attestation_manifest
+        and manifest.get("annotations", {}).get("vnd.docker.reference.type")
+        == "attestation-manifest"
+        for manifest in manifests
+    ):
+        raise MaterialError("Trustee image kbs lacks its locked attestation manifest")
+    attestation = skopeo_raw(f"{repository}@{attestation_manifest}")
+    layers = attestation.get("layers")
+    if not isinstance(layers, list):
+        raise MaterialError("Trustee image kbs attestation manifest lacks layers")
+    predicates = {
+        layer.get("annotations", {}).get("in-toto.io/predicate-type"): layer.get(
+            "digest"
+        )
+        for layer in layers
+        if isinstance(layer, dict)
+    }
+    if predicates.get("https://spdx.dev/Document") != image["attestations"]["sbom"]:
+        raise MaterialError("Trustee image kbs SBOM attestation drifted")
+    if (
+        predicates.get("https://slsa.dev/provenance/v1")
+        != image["attestations"]["provenance"]
+    ):
+        raise MaterialError("Trustee image kbs provenance attestation drifted")
+
+    source = lock["sources"][image["source"]]
+    statement = oras_blob(f"{repository}@{image['attestations']['provenance']}")
+    if statement.get("predicateType") != "https://slsa.dev/provenance/v1":
+        raise MaterialError("Trustee image kbs provenance predicate is not SLSA v1")
+    subjects = statement.get("subject")
+    expected_platform_digest = image["platform_manifest"].removeprefix("sha256:")
+    if not isinstance(subjects, list) or not any(
+        isinstance(subject, dict)
+        and subject.get("digest", {}).get("sha256") == expected_platform_digest
+        for subject in subjects
+    ):
+        raise MaterialError(
+            "Trustee image kbs provenance does not bind its platform manifest"
+        )
+    try:
+        build_definition = statement["predicate"]["buildDefinition"]
+        request = build_definition["externalParameters"]["request"]["root"]["request"][
+            "args"
+        ]
+        internal = build_definition["internalParameters"]
+    except (KeyError, TypeError) as error:
+        raise MaterialError(
+            "Trustee image kbs provenance lacks build identity"
+        ) from error
+    expected_slug = source["repository"].removeprefix("https://github.com/")
+    expected_workflow = (
+        f"{expected_slug}/.github/workflows/downstream-kbs-grpc-as.yml@"
+        "refs/heads/downstream/confidential-storage"
+    )
+    if (
+        request.get("vcs:revision") != source["revision"]
+        or request.get("vcs:source") != source["repository"]
+        or request.get("vcs:localdir:dockerfile")
+        != os.fspath(Path(image["dockerfile"]).parent)
+        or internal.get("github_repository") != expected_slug
+        or internal.get("github_workflow_sha") != source["revision"]
+        or internal.get("github_workflow_ref") != expected_workflow
+        or internal.get("github_ref") != "refs/heads/downstream/confidential-storage"
+        or internal.get("github_event_name") != "push"
+    ):
+        raise MaterialError("Trustee image kbs provenance source identity drifted")
 
 
 def clone_exact(
@@ -578,9 +937,9 @@ def verify_prepared_kata(lock: dict[str, Any], repo: Path) -> None:
             raise MaterialError(
                 f"prepared Kata source lacks required package {package}"
             )
-    rootfs_builder = (
-        repo / "tools/osbuilder/rootfs-builder/rootfs.sh"
-    ).read_text(encoding="utf-8")
+    rootfs_builder = (repo / "tools/osbuilder/rootfs-builder/rootfs.sh").read_text(
+        encoding="utf-8"
+    )
     if rootfs_builder.count(': > "${dns_file}"') != 1:
         raise MaterialError(
             "prepared Kata source does not clear the guest resolver before image creation"
@@ -596,12 +955,10 @@ def verify_prepared_kata(lock: dict[str, Any], repo: Path) -> None:
             "prepared Kata libseccomp installer must be executable by the builder UID"
         )
     packaging = (
-        repo
-        / "tools/packaging/kata-deploy/local-build/kata-deploy-binaries.sh"
+        repo / "tools/packaging/kata-deploy/local-build/kata-deploy-binaries.sh"
     ).read_text(encoding="utf-8")
     resolver_call = (
-        'digest="$(resolve_oci_artifact_manifest '
-        '"${disk_image_ref}" "${go_arch}")"'
+        'digest="$(resolve_oci_artifact_manifest "${disk_image_ref}" "${go_arch}")"'
     )
     if packaging.count(resolver_call) != 1:
         raise MaterialError(
@@ -698,14 +1055,58 @@ def emit_materials(
             }
         )
 
-    for name, reference in sorted(lock["trustee_images"].items()):
+    builder = lock["builder"]
+    builder_source = lock["sources"][builder["source"]]
+    for relative, digest in sorted(builder["input_files"].items()):
         resolved.append(
             {
-                "uri": reference.split("@", 1)[0],
-                "digest": {"sha256": reference.rsplit(":", 1)[1]},
-                "annotations": {"component": f"trustee-{name}"},
+                "uri": f"https://codewire.sh/build/confidential-storage/inputs/{relative}",
+                "digest": {"sha256": digest},
+                "annotations": {
+                    "component": "extension-builder",
+                    "role": "build-recipe",
+                    "baseSourceRepository": builder_source["repository"],
+                    "baseSourceRevision": builder_source["revision"],
+                },
             }
         )
+
+    for name, image in sorted(lock["trustee_images"].items()):
+        source = lock["sources"][image["source"]]
+        annotations = {
+            "component": f"trustee-{name}",
+            "source": image["source"],
+            "sourceRepository": source["repository"],
+            "sourceRevision": source["revision"],
+            "sourceTree": source["tree"],
+            "publishedTag": image["published_tag"],
+            "platform": image["platform"],
+            "platformManifest": image["platform_manifest"],
+            "dockerfile": image["dockerfile"],
+        }
+        for attestation_name, digest in sorted(image["attestations"].items()):
+            annotations[f"{attestation_name}Attestation"] = digest
+        resolved.append(
+            {
+                "uri": image["reference"].split("@", 1)[0],
+                "digest": {"sha256": image["reference"].rsplit(":", 1)[1]},
+                "annotations": annotations,
+            }
+        )
+        for relative, digest in sorted(image["build_files"].items()):
+            resolved.append(
+                {
+                    "uri": (
+                        f"git+{source['repository']}.git@"
+                        f"{source['revision']}#{relative}"
+                    ),
+                    "digest": {"sha256": digest},
+                    "annotations": {
+                        "component": f"trustee-{name}",
+                        "role": "build-recipe",
+                    },
+                }
+            )
     for name, reference in sorted(lock["base_images"].items()):
         resolved.append(
             {
@@ -741,8 +1142,10 @@ def emit_materials(
             },
             "runDetails": {
                 "builder": {
-                    "id": "https://github.com/noeljackson/extensions/tree/"
-                    + lock["sources"]["extensions"]["revision"]
+                    "id": (
+                        "https://codewire.sh/builders/confidential-storage/"
+                        f"sha256:{builder['input_tree_sha256']}"
+                    )
                 },
                 "metadata": {
                     "invocationId": source_lock_sha,
@@ -946,7 +1349,12 @@ def verify_kata_extension_layer(data: bytes, expected_kata_version: str) -> None
                     "Kata extension commodity runtime config is unreadable"
                 )
             config = tomllib.loads(stream.read().decode("utf-8"))
-    except (OSError, UnicodeDecodeError, tarfile.TarError, tomllib.TOMLDecodeError) as error:
+    except (
+        OSError,
+        UnicodeDecodeError,
+        tarfile.TarError,
+        tomllib.TOMLDecodeError,
+    ) as error:
         raise MaterialError(
             f"Kata extension commodity runtime config is not valid TOML: {error}"
         ) from error
@@ -1013,7 +1421,12 @@ def verify_kata_extension_layer(data: bytes, expected_kata_version: str) -> None
                     "Kata extension QEMU-SNP runtime config is unreadable"
                 )
             qemu_config = tomllib.loads(stream.read().decode("utf-8"))
-    except (OSError, UnicodeDecodeError, tarfile.TarError, tomllib.TOMLDecodeError) as error:
+    except (
+        OSError,
+        UnicodeDecodeError,
+        tarfile.TarError,
+        tomllib.TOMLDecodeError,
+    ) as error:
         raise MaterialError(
             f"Kata extension QEMU-SNP runtime config is not valid TOML: {error}"
         ) from error
@@ -1033,7 +1446,9 @@ def verify_kata_extension_layer(data: bytes, expected_kata_version: str) -> None
     if qemu_hypervisor.get("confidential_guest") is not True:
         raise MaterialError("Kata extension QEMU-SNP config is not confidential")
     if qemu_hypervisor.get("shared_fs") != "none":
-        raise MaterialError("Kata extension QEMU-SNP config does not use shared_fs=none")
+        raise MaterialError(
+            "Kata extension QEMU-SNP config does not use shared_fs=none"
+        )
     qemu_annotations = qemu_hypervisor.get("enable_annotations")
     required_qemu_annotations = {"cc_init_data", "kernel_params"}
     allowed_qemu_annotations = {
@@ -1049,12 +1464,8 @@ def verify_kata_extension_layer(data: bytes, expected_kata_version: str) -> None
         or any(not isinstance(value, str) for value in qemu_annotations)
         or not required_qemu_annotations.issubset(qemu_annotations)
     ):
-        raise MaterialError(
-            "Kata extension QEMU-SNP config lacks required annotations"
-        )
-    if any(
-        value not in allowed_qemu_annotations for value in qemu_annotations
-    ):
+        raise MaterialError("Kata extension QEMU-SNP config lacks required annotations")
+    if any(value not in allowed_qemu_annotations for value in qemu_annotations):
         raise MaterialError(
             "Kata extension QEMU-SNP config contains an unsafe annotation rule"
         )
@@ -1079,11 +1490,15 @@ def verify_kata_extension_layer(data: bytes, expected_kata_version: str) -> None
             raise MaterialError(
                 f"Kata extension {description} root hash is unreadable: {error}"
             ) from error
-        if len(lines) != 1 or re.fullmatch(
-            r"root_hash=[0-9a-f]{64},salt=[0-9a-f]{64},data_blocks=[1-9][0-9]*,"
-            r"data_block_size=[1-9][0-9]*,hash_block_size=[1-9][0-9]*",
-            lines[0],
-        ) is None:
+        if (
+            len(lines) != 1
+            or re.fullmatch(
+                r"root_hash=[0-9a-f]{64},salt=[0-9a-f]{64},data_blocks=[1-9][0-9]*,"
+                r"data_block_size=[1-9][0-9]*,hash_block_size=[1-9][0-9]*",
+                lines[0],
+            )
+            is None
+        ):
             raise MaterialError(
                 f"Kata extension {description} root hash has an invalid format"
             )
@@ -1104,7 +1519,9 @@ def verify_kata_extension_layer(data: bytes, expected_kata_version: str) -> None
 
     guest_images = qemu_hypervisor.get("guest_extension_images")
     if not isinstance(guest_images, list) or not guest_images:
-        raise MaterialError("Kata extension QEMU-SNP config has no guest extension images")
+        raise MaterialError(
+            "Kata extension QEMU-SNP config has no guest extension images"
+        )
 
     expected_coco_path = (
         "/usr/local/share/kata-containers/kata-containers-coco-extension.img"
@@ -1306,15 +1723,13 @@ def verify_oci_image(
             raise MaterialError("OCI image label does not bind the exact source lock")
 
         expected_labels = {
-            "io.codewire.source.extensions": lock["sources"]["extensions"][
+            "io.codewire.source.extensions": lock["sources"]["extensions"]["revision"],
+            "io.codewire.source.guest-components": lock["sources"]["guest_components"][
                 "revision"
             ],
-            "io.codewire.source.guest-components": lock["sources"][
-                "guest_components"
-            ]["revision"],
-            "io.codewire.source.kata-containers": lock["sources"][
-                "kata_containers"
-            ]["revision"],
+            "io.codewire.source.kata-containers": lock["sources"]["kata_containers"][
+                "revision"
+            ],
         }
         for name, expected in expected_labels.items():
             if labels.get(name) != expected:
@@ -1359,7 +1774,9 @@ def parse_artifact(value: str) -> tuple[str, Path]:
 def parse_oci_artifact(value: str) -> tuple[str, Path]:
     component, path = parse_artifact(value)
     if component != "kata-extension":
-        raise argparse.ArgumentTypeError("OCI artifact component must be kata-extension")
+        raise argparse.ArgumentTypeError(
+            "OCI artifact component must be kata-extension"
+        )
     return component, path
 
 
@@ -1379,6 +1796,22 @@ def build_parser() -> argparse.ArgumentParser:
     git_source = subparsers.add_parser("verify-git")
     git_source.add_argument("--source", required=True, choices=sorted(SOURCE_NAMES))
     git_source.add_argument("--repo", required=True, type=Path)
+
+    verify_builder_parser = subparsers.add_parser("verify-builder")
+    verify_builder_parser.add_argument("--repo", required=True, type=Path)
+
+    trustee_image_source = subparsers.add_parser("verify-trustee-image-source")
+    trustee_image_source.add_argument(
+        "--component", required=True, choices=sorted(TRUSTEE_IMAGE_NAMES)
+    )
+    trustee_image_source.add_argument("--repo", required=True, type=Path)
+
+    trustee_image_publication = subparsers.add_parser(
+        "verify-trustee-image-publication"
+    )
+    trustee_image_publication.add_argument(
+        "--component", required=True, choices=sorted(TRUSTEE_IMAGE_NAMES)
+    )
 
     prepare_kata_parser = subparsers.add_parser("prepare-kata")
     prepare_kata_parser.add_argument("--repo", required=True, type=Path)
@@ -1411,6 +1844,15 @@ def main() -> int:
         elif args.command == "verify-git":
             verify_git_source(lock, args.source, args.repo)
             print(f"{args.source} Git commit and tree match the source lock")
+        elif args.command == "verify-builder":
+            verify_builder(lock, args.repo)
+            print("extension builder checkout matches the locked input tree")
+        elif args.command == "verify-trustee-image-source":
+            verify_trustee_image_source(lock, args.component, args.repo)
+            print(f"Trustee image {args.component} source and recipes match the lock")
+        elif args.command == "verify-trustee-image-publication":
+            verify_trustee_image_publication(lock, args.component)
+            print(f"Trustee image {args.component} publication matches the lock")
         elif args.command == "prepare-kata":
             receipt = prepare_kata(args.lock, lock, args.repo, args.output)
             print(receipt)
