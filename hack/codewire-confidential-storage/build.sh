@@ -9,10 +9,18 @@ set -euo pipefail
 umask 022
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+repo_root="$(cd "${script_dir}/../.." && pwd)"
 default_scratch_root="${script_dir}/_out/scratch"
 lock_file="${script_dir}/sources.lock.json"
 materials_tool="${script_dir}/materials.py"
-source_names=(extensions guest_components kata_containers trustee)
+source_names=(
+  extensions
+  guest_components
+  kata_containers
+  trustee
+  trustee_attestation_service
+  trustee_rvps
+)
 kata_parallel_targets=(
   agent-tarball
   pause-image-tarball
@@ -51,6 +59,10 @@ Commands:
       Validate the source lock and emit deterministic source SBOM/provenance.
   fetch-archives CACHE_DIR
       Download every immutable source archive and verify SHA-256 plus SHA-512.
+  verify-trustee-sources TRUSTEE_REPOSITORY
+      Verify every consumed Trustee image recipe against its exact source commit.
+  verify-trustee-publications
+      Verify each public Trustee tag, index, platform manifest, and attestation digest.
   plan
       Print the exact non-publishing build plan.
   prepare-kata KATA_REPOSITORY OUTPUT_DIRECTORY
@@ -83,6 +95,12 @@ lock_value() {
 
 lock_sha256() {
   sha256sum "$lock_file" | awk '{print $1}'
+}
+
+verify_builder_checkout() {
+  require_command python3
+  python3 "$materials_tool" --lock "$lock_file" validate >/dev/null
+  python3 "$materials_tool" --lock "$lock_file" verify-builder --repo "$repo_root" >/dev/null
 }
 
 verify_guest_components_artifact() {
@@ -495,11 +513,13 @@ case "$command" in
   verify)
     require_command python3
     python3 "$materials_tool" --lock "$lock_file" validate
+    python3 "$materials_tool" --lock "$lock_file" verify-builder --repo "$repo_root"
     python3 "$materials_tool" --lock "$lock_file" emit --output-dir "${script_dir}/_out"
     ;;
 
   fetch-archives)
     [[ $# -eq 2 ]] || die "fetch-archives requires CACHE_DIR"
+    verify_builder_checkout
     require_command curl
     require_command jq
     cache_dir=$2
@@ -512,9 +532,29 @@ case "$command" in
     python3 "$materials_tool" --lock "$lock_file" verify-archives --cache "$cache_dir"
     ;;
 
+  verify-trustee-sources)
+    [[ $# -eq 2 ]] || die "verify-trustee-sources requires TRUSTEE_REPOSITORY"
+    verify_builder_checkout
+    for component in attestation_service kbs rvps; do
+      python3 "$materials_tool" --lock "$lock_file" verify-trustee-image-source \
+        --component "$component" --repo "$2"
+    done
+    ;;
+
+  verify-trustee-publications)
+    [[ $# -eq 1 ]] || die "verify-trustee-publications takes no arguments"
+    verify_builder_checkout
+    require_command oras
+    require_command skopeo
+    for component in attestation_service kbs rvps; do
+      python3 "$materials_tool" --lock "$lock_file" \
+        verify-trustee-image-publication --component "$component"
+    done
+    ;;
+
   plan)
     require_command jq
-    python3 "$materials_tool" --lock "$lock_file" validate >/dev/null
+    verify_builder_checkout
     jq -n \
       --arg platform "$(lock_value '.platforms[0]')" \
       --arg guest "$(lock_value '.sources.guest_components.revision')" \
@@ -526,11 +566,13 @@ case "$command" in
 
   prepare-kata)
     [[ $# -eq 3 ]] || die "prepare-kata requires KATA_REPOSITORY OUTPUT_DIRECTORY"
+    verify_builder_checkout
     python3 "$materials_tool" --lock "$lock_file" prepare-kata --repo "$2" --output "$3"
     ;;
 
   kata-static)
     [[ $# -eq 2 || $# -eq 3 ]] || die "kata-static requires OUTPUT_TARBALL [KATA_REPOSITORY]"
+    verify_builder_checkout
     require_command docker
     require_command git
     require_command make
@@ -580,6 +622,7 @@ case "$command" in
   kata-guest-components)
     [[ $# -eq 2 || $# -eq 3 ]] || \
       die "kata-guest-components requires OUTPUT_TARBALL [KATA_REPOSITORY]"
+    verify_builder_checkout
     require_command docker
     require_command git
     require_command make
@@ -611,11 +654,13 @@ case "$command" in
 
   verify-kata-static)
     [[ $# -eq 2 ]] || die "verify-kata-static requires KATA_TARBALL"
+    verify_builder_checkout
     verify_kata_static "$2"
     ;;
 
   kata-extension)
     [[ $# -eq 3 ]] || die "kata-extension requires KATA_TARBALL OUTPUT_DIRECTORY"
+    verify_builder_checkout
     require_command docker
     require_command jq
     require_command python3
