@@ -445,6 +445,32 @@ PY
   if grep -Eq '"(\.\*|\*)"' <<<"$annotations"; then
     die "QEMU-SNP configuration contains a wildcard annotation rule"
   fi
+  python3 - "$qemu_snp_config" <<'PY' || \
+    die "QEMU-SNP configuration admits an unsafe hypervisor annotation"
+import pathlib
+import sys
+import tomllib
+
+config = tomllib.loads(pathlib.Path(sys.argv[1]).read_text())
+annotations = config.get("hypervisor", {}).get("qemu", {}).get("enable_annotations")
+required = {"cc_init_data", "kernel_params"}
+allowed = {
+    "cc_init_data",
+    "default_memory",
+    "default_vcpus",
+    "enable_iommu",
+    "kernel_params",
+    "kernel_verity_params",
+}
+if (
+    not isinstance(annotations, list)
+    or any(not isinstance(value, str) for value in annotations)
+    or not required.issubset(annotations)
+):
+    raise SystemExit("required QEMU-SNP annotations are absent")
+if any(value not in allowed for value in annotations):
+    raise SystemExit("QEMU-SNP annotation allowlist is not exact")
+PY
   grep -Eq '^shared_fs = "none"$' "$rootfs/usr/local/share/kata-containers/configuration-qemu-snp.toml" \
     || die "QEMU-SNP configuration does not preserve shared_fs=none"
   grep -Fqx "overhead_memory = ${expected_overhead_memory}" "$qemu_snp_config" \

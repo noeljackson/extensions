@@ -522,6 +522,7 @@ image = "/usr/local/share/kata-containers/kata-containers-confidential.img"
 kernel_verity_params = "root_hash=cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc,salt=dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd,data_blocks=2,data_block_size=4096,hash_block_size=4096"
 confidential_guest = true
 shared_fs = "none"
+enable_annotations = ["enable_iommu", "kernel_params", "kernel_verity_params", "default_vcpus", "default_memory", "cc_init_data"]
 [[hypervisor.qemu.guest_extension_images]]
 name = "coco"
 path = "/usr/local/share/kata-containers/not-the-coco-image.img"
@@ -559,6 +560,77 @@ verity_params = "root_hash=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
                 materials.verify_oci_image(
                     LOCK_PATH, self.lock, "kata-extension", shared_root
                 )
+
+    def test_kata_extension_requires_guest_only_confidential_mount_profile(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            config_name = (
+                "rootfs/usr/local/share/kata-containers/"
+                "configuration-qemu-snp.toml"
+            )
+            for name, replacement in (
+                ("missing-shared-fs", b""),
+                ("virtio-fs", b'shared_fs = "virtio-fs"'),
+                ("inline-virtio-fs", b'shared_fs = "inline-virtio-fs"'),
+                ("nydus-virtio-fs", b'shared_fs = "virtio-fs-nydus"'),
+                ("9p", b'shared_fs = "9p"'),
+            ):
+                with self.subTest(name=name):
+                    entries = self._kata_extension_entries()
+                    entries[config_name] = entries[config_name].replace(
+                        b'shared_fs = "none"', replacement
+                    )
+                    archive, _ = self._write_oci_archive(
+                        root / name,
+                        component="kata-extension",
+                        layer_entries=entries,
+                    )
+                    with self.assertRaisesRegex(
+                        materials.MaterialError, "does not use shared_fs=none"
+                    ):
+                        materials.verify_oci_image(
+                            LOCK_PATH, self.lock, "kata-extension", archive
+                        )
+
+            annotation_line = (
+                b'enable_annotations = ["enable_iommu", "kernel_params", '
+                b'"kernel_verity_params", "default_vcpus", "default_memory", '
+                b'"cc_init_data"]'
+            )
+            for name, replacement, expected in (
+                ("missing-annotations", b"", "lacks required annotations"),
+                (
+                    "shared-fs-annotation",
+                    annotation_line[:-1] + b', "shared_fs"]',
+                    "unsafe annotation rule",
+                ),
+                (
+                    "shared-fs-regex-annotation",
+                    annotation_line[:-1] + b', "shared_.*"]',
+                    "unsafe annotation rule",
+                ),
+                (
+                    "wildcard-annotation",
+                    annotation_line[:-1] + b', ".*"]',
+                    "unsafe annotation rule",
+                ),
+            ):
+                with self.subTest(name=name):
+                    entries = self._kata_extension_entries()
+                    entries[config_name] = entries[config_name].replace(
+                        annotation_line, replacement
+                    )
+                    archive, _ = self._write_oci_archive(
+                        root / name,
+                        component="kata-extension",
+                        layer_entries=entries,
+                    )
+                    with self.assertRaisesRegex(materials.MaterialError, expected):
+                        materials.verify_oci_image(
+                            LOCK_PATH, self.lock, "kata-extension", archive
+                        )
 
     def test_kata_extension_binds_verity_params_to_root_hashes(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -731,6 +803,8 @@ metadata:
         self.assertIn("rootfs-initrd-confidential-tarball", recipe)
         self.assertIn("qemu-snp-experimental-tarball", recipe)
         self.assertIn("sfdisk --json", recipe)
+        self.assertIn("QEMU-SNP annotation allowlist is not exact", recipe)
+        self.assertIn('grep -Eq \'^shared_fs = "none"$\'', recipe)
 
         smoke = (SCRIPT_DIR / "qemu-tcg-boot-smoke").read_text(encoding="utf-8")
         self.assertIn("console=ttyS0,115200", smoke)
@@ -962,6 +1036,7 @@ image = "/usr/local/share/kata-containers/kata-containers-confidential.img"
 kernel_verity_params = "root_hash=cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc,salt=dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd,data_blocks=2,data_block_size=4096,hash_block_size=4096"
 confidential_guest = true
 shared_fs = "none"
+enable_annotations = ["enable_iommu", "kernel_params", "kernel_verity_params", "default_vcpus", "default_memory", "cc_init_data"]
 [[hypervisor.qemu.guest_extension_images]]
 name = "coco"
 path = "/usr/local/share/kata-containers/kata-containers-coco-extension.img"

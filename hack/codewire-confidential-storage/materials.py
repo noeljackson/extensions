@@ -1034,6 +1034,30 @@ def verify_kata_extension_layer(data: bytes, expected_kata_version: str) -> None
         raise MaterialError("Kata extension QEMU-SNP config is not confidential")
     if qemu_hypervisor.get("shared_fs") != "none":
         raise MaterialError("Kata extension QEMU-SNP config does not use shared_fs=none")
+    qemu_annotations = qemu_hypervisor.get("enable_annotations")
+    required_qemu_annotations = {"cc_init_data", "kernel_params"}
+    allowed_qemu_annotations = {
+        "cc_init_data",
+        "default_memory",
+        "default_vcpus",
+        "enable_iommu",
+        "kernel_params",
+        "kernel_verity_params",
+    }
+    if (
+        not isinstance(qemu_annotations, list)
+        or any(not isinstance(value, str) for value in qemu_annotations)
+        or not required_qemu_annotations.issubset(qemu_annotations)
+    ):
+        raise MaterialError(
+            "Kata extension QEMU-SNP config lacks required annotations"
+        )
+    if any(
+        value not in allowed_qemu_annotations for value in qemu_annotations
+    ):
+        raise MaterialError(
+            "Kata extension QEMU-SNP config contains an unsafe annotation rule"
+        )
 
     def read_verity_record(member_name: str, description: str) -> str:
         member = by_name[member_name]
