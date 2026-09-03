@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import copy
 import hashlib
 import importlib.util
@@ -34,24 +35,20 @@ class MaterialTests(unittest.TestCase):
                 "af6047316cc21bb3a1d3a1e4c9906f4ddd7b1dbd",
             ),
             "guest_components": (
-                "60e8f1cec981db876acc9c5616f638adb19eaf85",
-                "b271dcc4169246f9944ed13380b43d68be749708",
+                "d7c74a521fb1723b471a161be4692f2a712243e0",
+                "3b1ef55662c34cb3183043626c848629be8cf600",
             ),
             "kata_containers": (
                 "08a49558c321f5aabfd9f86621d5e1d2bd0a8e18",
                 "e8bdfd905aa430e9edbc4a3119e018277c83ed2e",
             ),
             "trustee": (
-                "d8ffc4c95be05af4232bbf0b70d10bc94e0dad0b",
-                "9ca0cfb6f82322027105376b209eaeb596735c48",
+                "084ab0cf09132de0dda17d5aec984e039d3fc634",
+                "c679e05a4d818c7bf7d288fe58c171697f9ab6a6",
             ),
             "trustee_attestation_service": (
                 "6bb2f94d534274489ce41e7023fdd0e559d9f80c",
                 "df909a1c4fde58d0318ca699edaa2d6b9d7bcc6c",
-            ),
-            "trustee_rvps": (
-                "258ea4acb7b9bd865fce5c63a539f2120dba8298",
-                "1d4368226a1d95ff4f30d6e9c5496595632e29cf",
             ),
         }
         for name, (revision, tree) in expected.items():
@@ -87,6 +84,10 @@ class MaterialTests(unittest.TestCase):
         self.assertEqual(
             self.lock["talos_extensions"]["installer_profile"],
             "servernet-confidential-storage-only",
+        )
+        self.assertEqual(
+            self.lock["trustee_images"]["kbs"],
+            self.lock["trustee_images"]["rvps"],
         )
 
     def test_branch_archive_and_short_revision_are_rejected(self) -> None:
@@ -160,6 +161,33 @@ class MaterialTests(unittest.TestCase):
 
     def test_provenanced_images_and_servernet_profile_are_required(self) -> None:
         changed = copy.deepcopy(self.lock)
+        changed["guest_components_images"]["container"]["reference"] = (
+            "ghcr.io/noeljackson/guest-components/coco-extension:latest"
+        )
+        with self.assertRaisesRegex(materials.MaterialError, "immutable digest"):
+            materials.validate_lock(changed)
+        changed = copy.deepcopy(self.lock)
+        changed["guest_components_images"]["container"]["published_tag"] = "latest"
+        with self.assertRaisesRegex(materials.MaterialError, "source revision"):
+            materials.validate_lock(changed)
+        changed = copy.deepcopy(self.lock)
+        changed["guest_components_images"]["container"]["source"] = "trustee"
+        with self.assertRaisesRegex(materials.MaterialError, "guest_components source"):
+            materials.validate_lock(changed)
+        changed = copy.deepcopy(self.lock)
+        changed["guest_components_images"]["container"]["attestations"].pop("sbom")
+        with self.assertRaisesRegex(
+            materials.MaterialError, "attestations keys differ"
+        ):
+            materials.validate_lock(changed)
+        changed = copy.deepcopy(self.lock)
+        changed["guest_components_images"]["container"]["attestations"]["provenance"][
+            "manifest"
+        ] = "sha256:" + "0" * 64
+        with self.assertRaisesRegex(materials.MaterialError, "digest is invalid"):
+            materials.validate_lock(changed)
+
+        changed = copy.deepcopy(self.lock)
         changed["trustee_images"]["kbs"]["reference"] = (
             "ghcr.io/confidential-containers/staged-images/kbs-grpc-as:latest"
         )
@@ -180,13 +208,19 @@ class MaterialTests(unittest.TestCase):
         ):
             materials.validate_lock(changed)
         changed = copy.deepcopy(self.lock)
-        changed["trustee_images"]["kbs"]["source"] = "trustee_rvps"
+        changed["trustee_images"]["kbs"]["source"] = "trustee_attestation_service"
         with self.assertRaisesRegex(materials.MaterialError, "must use source trustee"):
             materials.validate_lock(changed)
         changed = copy.deepcopy(self.lock)
         changed["trustee_images"]["kbs"]["attestations"].pop("provenance")
         with self.assertRaisesRegex(
             materials.MaterialError, "attestations keys differ"
+        ):
+            materials.validate_lock(changed)
+        changed = copy.deepcopy(self.lock)
+        changed["trustee_images"]["rvps"]["platform_manifest"] = "sha256:" + "0" * 64
+        with self.assertRaisesRegex(
+            materials.MaterialError, "same combined downstream image"
         ):
             materials.validate_lock(changed)
         changed = copy.deepcopy(self.lock)
@@ -301,7 +335,9 @@ class MaterialTests(unittest.TestCase):
             mock.patch.object(materials, "run_skopeo", side_effect=valid_skopeo),
             mock.patch.object(materials, "oras_blob", return_value=provenance),
         ):
-            materials.verify_trustee_image_publication(self.lock, "kbs")
+            for component in ("kbs", "rvps"):
+                with self.subTest(component=component):
+                    materials.verify_trustee_image_publication(self.lock, component)
 
         with mock.patch.object(
             materials, "run_skopeo", return_value="sha256:" + "0" * 64
@@ -338,6 +374,338 @@ class MaterialTests(unittest.TestCase):
                 materials.MaterialError, "source identity drifted"
             ):
                 materials.verify_trustee_image_publication(self.lock, "kbs")
+
+    def test_guest_publication_oracle_rejects_tag_source_or_attestation_drift(
+        self,
+    ) -> None:
+        lock = copy.deepcopy(self.lock)
+        image = lock["guest_components_images"]["container"]
+        repository = image["reference"].split("@", 1)[0]
+        source = lock["sources"]["guest_components"]
+        subject_digest = "sha256:" + "5" * 64
+        config_digest = "sha256:" + "6" * 64
+        image["reference"] = f"{repository}@{subject_digest}"
+        image["attestations"] = {
+            "provenance": {
+                "manifest": "sha256:" + "1" * 64,
+                "bundle": "sha256:" + "2" * 64,
+            },
+            "sbom": {
+                "manifest": "sha256:" + "3" * 64,
+                "bundle": "sha256:" + "4" * 64,
+            },
+        }
+        manifest = {
+            "config": {
+                "mediaType": "application/vnd.docker.container.image.v1+json",
+                "digest": config_digest,
+            },
+            "layers": [
+                {
+                    "mediaType": "application/vnd.docker.image.rootfs.diff.tar.gzip",
+                    "digest": "sha256:" + "c" * 64,
+                }
+            ],
+        }
+        config = {
+            "architecture": "amd64",
+            "os": "linux",
+            "config": {
+                "Labels": {
+                    "org.opencontainers.image.source": source["repository"],
+                    "org.opencontainers.image.revision": source["revision"],
+                }
+            },
+        }
+        statement_subject = [
+            {
+                "name": repository,
+                "digest": {"sha256": subject_digest.removeprefix("sha256:")},
+            }
+        ]
+        branch = "refs/heads/downstream/confidential-storage"
+        provenance = {
+            "_type": "https://in-toto.io/Statement/v1",
+            "subject": statement_subject,
+            "predicateType": "https://slsa.dev/provenance/v1",
+            "predicate": {
+                "buildDefinition": {
+                    "buildType": "https://actions.github.io/buildtypes/workflow/v1",
+                    "externalParameters": {
+                        "workflow": {
+                            "ref": branch,
+                            "repository": source["repository"],
+                            "path": ".github/workflows/coco-extension-image.yml",
+                        }
+                    },
+                    "internalParameters": {
+                        "github": {
+                            "event_name": "push",
+                            "runner_environment": "github-hosted",
+                        }
+                    },
+                    "resolvedDependencies": [
+                        {
+                            "uri": f"git+{source['repository']}@{branch}",
+                            "digest": {"gitCommit": source["revision"]},
+                        }
+                    ],
+                },
+                "runDetails": {
+                    "builder": {
+                        "id": (
+                            f"{source['repository']}/.github/workflows/"
+                            f"coco-extension-image.yml@{branch}"
+                        )
+                    }
+                },
+            },
+        }
+        sbom = {
+            "_type": "https://in-toto.io/Statement/v1",
+            "subject": statement_subject,
+            "predicateType": "https://spdx.dev/Document/v2.3",
+            "predicate": {"SPDXID": "SPDXRef-DOCUMENT"},
+        }
+
+        def attestation_manifest(name: str) -> dict:
+            locked = image["attestations"][name]
+            return {
+                "artifactType": "application/vnd.dev.sigstore.bundle.v0.3+json",
+                "subject": {"digest": subject_digest},
+                "layers": [
+                    {
+                        "mediaType": ("application/vnd.dev.sigstore.bundle.v0.3+json"),
+                        "digest": locked["bundle"],
+                    }
+                ],
+                "annotations": {
+                    "dev.sigstore.bundle.predicateType": (
+                        materials.GUEST_IMAGE_ATTESTATION_PREDICATES["container"][name]
+                    )
+                },
+            }
+
+        def sigstore_bundle(statement: dict) -> dict:
+            payload = base64.b64encode(
+                json.dumps(statement, sort_keys=True).encode()
+            ).decode()
+            return {
+                "mediaType": "application/vnd.dev.sigstore.bundle.v0.3+json",
+                "dsseEnvelope": {
+                    "payloadType": "application/vnd.in-toto+json",
+                    "payload": payload,
+                    "signatures": [{"sig": "test"}],
+                },
+            }
+
+        manifests = {
+            image["reference"]: manifest,
+            f"{repository}@{image['attestations']['provenance']['manifest']}": (
+                attestation_manifest("provenance")
+            ),
+            f"{repository}@{image['attestations']['sbom']['manifest']}": (
+                attestation_manifest("sbom")
+            ),
+        }
+        blobs = {
+            f"{repository}@{config_digest}": config,
+            f"{repository}@{image['attestations']['provenance']['bundle']}": (
+                sigstore_bundle(provenance)
+            ),
+            f"{repository}@{image['attestations']['sbom']['bundle']}": (
+                sigstore_bundle(sbom)
+            ),
+        }
+
+        def valid_skopeo(*arguments: str) -> str:
+            if "--format" in arguments:
+                return subject_digest
+            reference = arguments[-1].removeprefix("docker://")
+            return json.dumps(manifests[reference])
+
+        def valid_blob(reference: str) -> dict:
+            return blobs[reference]
+
+        with (
+            mock.patch.object(
+                materials, "oras_manifest_digest", return_value=subject_digest
+            ),
+            mock.patch.object(materials, "run_skopeo", side_effect=valid_skopeo),
+            mock.patch.object(materials, "oras_blob", side_effect=valid_blob),
+        ):
+            materials.verify_guest_components_image_component(lock, "container")
+
+        with (
+            mock.patch.object(
+                materials, "oras_manifest_digest", return_value="sha256:" + "0" * 64
+            ),
+            self.assertRaisesRegex(materials.MaterialError, "tag digest mismatch"),
+        ):
+            materials.verify_guest_components_image_component(lock, "container")
+
+        drifted_config = copy.deepcopy(config)
+        drifted_config["config"]["Labels"]["org.opencontainers.image.revision"] = (
+            "0" * 40
+        )
+        drifted_blobs = {**blobs, f"{repository}@{config_digest}": drifted_config}
+        with (
+            mock.patch.object(
+                materials, "oras_manifest_digest", return_value=subject_digest
+            ),
+            mock.patch.object(materials, "run_skopeo", side_effect=valid_skopeo),
+            mock.patch.object(
+                materials, "oras_blob", side_effect=drifted_blobs.__getitem__
+            ),
+            self.assertRaisesRegex(materials.MaterialError, "source labels drifted"),
+        ):
+            materials.verify_guest_components_image_component(lock, "container")
+
+        drifted_provenance = copy.deepcopy(provenance)
+        drifted_provenance["predicate"]["buildDefinition"]["resolvedDependencies"][0][
+            "digest"
+        ]["gitCommit"] = "0" * 40
+        drifted_blobs = {
+            **blobs,
+            f"{repository}@{image['attestations']['provenance']['bundle']}": (
+                sigstore_bundle(drifted_provenance)
+            ),
+        }
+        with (
+            mock.patch.object(
+                materials, "oras_manifest_digest", return_value=subject_digest
+            ),
+            mock.patch.object(materials, "run_skopeo", side_effect=valid_skopeo),
+            mock.patch.object(
+                materials, "oras_blob", side_effect=drifted_blobs.__getitem__
+            ),
+            self.assertRaisesRegex(
+                materials.MaterialError, "provenance source identity drifted"
+            ),
+        ):
+            materials.verify_guest_components_image_component(lock, "container")
+
+        self_hosted_provenance = copy.deepcopy(provenance)
+        self_hosted_provenance["predicate"]["buildDefinition"]["internalParameters"][
+            "github"
+        ]["runner_environment"] = "self-hosted"
+        self_hosted_blobs = {
+            **blobs,
+            f"{repository}@{image['attestations']['provenance']['bundle']}": (
+                sigstore_bundle(self_hosted_provenance)
+            ),
+        }
+        with (
+            mock.patch.object(
+                materials, "oras_manifest_digest", return_value=subject_digest
+            ),
+            mock.patch.object(materials, "run_skopeo", side_effect=valid_skopeo),
+            mock.patch.object(
+                materials, "oras_blob", side_effect=self_hosted_blobs.__getitem__
+            ),
+            self.assertRaisesRegex(
+                materials.MaterialError, "provenance source identity drifted"
+            ),
+        ):
+            materials.verify_guest_components_image_component(lock, "container")
+
+        disk = lock["guest_components_images"]["disk"]
+        disk_repository = disk["reference"].split("@", 1)[0]
+        disk_digest = "sha256:" + "7" * 64
+        disk["reference"] = f"{disk_repository}@{disk_digest}"
+        disk["attestations"]["provenance"] = {
+            "manifest": "sha256:" + "8" * 64,
+            "bundle": "sha256:" + "9" * 64,
+        }
+        disk_manifest = {
+            "artifactType": (
+                "application/vnd.confidential-containers.coco-extension.disk"
+            ),
+            "layers": [
+                {
+                    "mediaType": "application/vnd.oci.image.layer.v1.tar",
+                    "digest": "sha256:" + "a" * 64,
+                    "annotations": {
+                        "org.opencontainers.image.title": (
+                            "kata-containers-coco-extension.img"
+                        )
+                    },
+                },
+                {
+                    "mediaType": "application/vnd.oci.image.layer.v1.tar",
+                    "digest": "sha256:" + "b" * 64,
+                    "annotations": {
+                        "org.opencontainers.image.title": (
+                            "root_hash_coco-extension.txt"
+                        )
+                    },
+                },
+            ],
+        }
+        disk_provenance = copy.deepcopy(provenance)
+        disk_provenance["subject"] = [
+            {
+                "name": disk_repository,
+                "digest": {"sha256": disk_digest.removeprefix("sha256:")},
+            }
+        ]
+        disk_attestation = {
+            "artifactType": "application/vnd.dev.sigstore.bundle.v0.3+json",
+            "subject": {"digest": disk_digest},
+            "layers": [
+                {
+                    "mediaType": "application/vnd.dev.sigstore.bundle.v0.3+json",
+                    "digest": disk["attestations"]["provenance"]["bundle"],
+                }
+            ],
+            "annotations": {
+                "dev.sigstore.bundle.predicateType": ("https://slsa.dev/provenance/v1")
+            },
+        }
+        disk_manifests = {
+            disk["reference"]: disk_manifest,
+            (
+                f"{disk_repository}@{disk['attestations']['provenance']['manifest']}"
+            ): disk_attestation,
+        }
+        disk_blobs = {
+            (
+                f"{disk_repository}@{disk['attestations']['provenance']['bundle']}"
+            ): sigstore_bundle(disk_provenance)
+        }
+
+        def valid_disk_skopeo(*arguments: str) -> str:
+            reference = arguments[-1].removeprefix("docker://")
+            return json.dumps(disk_manifests[reference])
+
+        with (
+            mock.patch.object(
+                materials, "oras_manifest_digest", return_value=disk_digest
+            ),
+            mock.patch.object(materials, "run_skopeo", side_effect=valid_disk_skopeo),
+            mock.patch.object(
+                materials, "oras_blob", side_effect=disk_blobs.__getitem__
+            ),
+        ):
+            materials.verify_guest_components_image_component(lock, "disk")
+
+        drifted_disk_manifests = copy.deepcopy(disk_manifests)
+        drifted_disk_manifests[disk["reference"]]["layers"].pop()
+
+        def drifted_disk_skopeo(*arguments: str) -> str:
+            reference = arguments[-1].removeprefix("docker://")
+            return json.dumps(drifted_disk_manifests[reference])
+
+        with (
+            mock.patch.object(
+                materials, "oras_manifest_digest", return_value=disk_digest
+            ),
+            mock.patch.object(materials, "run_skopeo", side_effect=drifted_disk_skopeo),
+            self.assertRaisesRegex(
+                materials.MaterialError, "disk image payload contract drifted"
+            ),
+        ):
+            materials.verify_guest_components_image_component(lock, "disk")
 
     def test_secret_named_fields_are_rejected(self) -> None:
         changed = copy.deepcopy(self.lock)
@@ -550,6 +918,23 @@ class MaterialTests(unittest.TestCase):
             dependencies = provenance["predicate"]["buildDefinition"][
                 "resolvedDependencies"
             ]
+            guest = next(
+                dependency
+                for dependency in dependencies
+                if dependency.get("annotations", {}).get("component")
+                == "guest-components-container-image"
+                and dependency.get("annotations", {}).get("role") is None
+            )
+            self.assertEqual(
+                guest["annotations"]["sourceRevision"],
+                self.lock["sources"]["guest_components"]["revision"],
+            )
+            self.assertEqual(
+                guest["annotations"]["provenanceBundleAttestation"],
+                self.lock["guest_components_images"]["container"]["attestations"][
+                    "provenance"
+                ]["bundle"],
+            )
             kbs = next(
                 dependency
                 for dependency in dependencies
@@ -558,11 +943,11 @@ class MaterialTests(unittest.TestCase):
             )
             self.assertEqual(
                 kbs["annotations"]["sourceRevision"],
-                "d8ffc4c95be05af4232bbf0b70d10bc94e0dad0b",
+                "084ab0cf09132de0dda17d5aec984e039d3fc634",
             )
             self.assertEqual(
                 kbs["annotations"]["provenanceAttestation"],
-                "sha256:3735986ec587727223889829f2a530e31f89c33097937b193cbafe10a1558688",
+                "sha256:b4290f23c8e5fed6824dc0cc31d1f92d7c0cd41c4bea2b9bef6e611e6d37f6a5",
             )
             self.assertTrue(
                 any(
@@ -954,6 +1339,8 @@ metadata:
         recipe = (SCRIPT_DIR / "build.sh").read_text(encoding="utf-8")
         for command in (
             "fetch-archives",
+            "verify-guest-source",
+            "verify-guest-publication",
             "verify-trustee-sources",
             "verify-trustee-publications",
             "plan",
@@ -984,12 +1371,10 @@ metadata:
         self.assertIn("kata-guest-components)", recipe)
         self.assertIn("BASE_TARBALLS=coco-guest-components-tarball", recipe)
         self.assertIn("verify_guest_components_artifact()", recipe)
-        self.assertEqual(recipe.count("    verify_guest_components_artifact\n"), 2)
-        self.assertIn('docker buildx imagetools inspect "$reference"', recipe)
-        self.assertIn(
-            "required guest-components artifact is not anonymously readable",
-            recipe,
-        )
+        self.assertEqual(recipe.count("    verify_guest_components_artifact\n"), 3)
+        self.assertIn("verify-guest-image-publication", recipe)
+        self.assertIn("require_command oras", recipe)
+        self.assertIn("require_command skopeo", recipe)
         self.assertLess(
             recipe.index("    verify_guest_components_artifact\n"),
             recipe.index('BASE_TARBALLS="$parallel_targets"'),

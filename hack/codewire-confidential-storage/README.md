@@ -8,16 +8,19 @@ exact SHA-256 input tree covering the two Dockerfiles, build/material tools, and
 QEMU smoke oracle; validation rejects a checkout that differs from that tree.
 
 The lock includes the accepted guest-components, Kata, downstream Trustee, and
-Extensions sources; the exact historical upstream Trustee commits used by the
-AS and RVPS images; the existing Codewire Talos-extension base; the BuildKit
-SBOM scanner; and the exact `iscsi-tools` and `util-linux-tools` package inputs.
-Each Trustee image binds its source commit/tree and dual-hashed archive,
-commit-derived publication tag, Dockerfile and workflow hashes, amd64 platform
-manifest, and immutable index digest. The downstream KBS entry additionally
-binds its embedded SBOM and SLSA provenance attestations. The latter two Talos
-packages are restricted by contract to the
-`servernet-confidential-storage-only` installer profile. Infra owns actually
-selecting them on that profile.
+Extensions sources; the exact historical upstream Trustee commit used by the
+AS image; the existing Codewire Talos-extension base; the BuildKit SBOM
+scanner; and the exact `iscsi-tools` and `util-linux-tools` package inputs. The
+Guest container and disk images bind their commit-derived tags, immutable
+manifests, workflow and recipe hashes, and available Sigstore-wrapped
+attestations; the container additionally requires exact source labels and an
+SPDX attestation. Each Trustee image binds its source commit/tree and dual-hashed
+archive, commit-derived publication tag, Dockerfile and workflow hashes, amd64
+platform manifest, and immutable index digest. KBS and RVPS are required to be
+the same downstream combined image with the same embedded SBOM and SLSA
+provenance attestations. The latter two Talos packages are restricted by
+contract to the `servernet-confidential-storage-only` installer profile. Infra
+owns actually selecting them on that profile.
 
 The `extensions` source entry binds the accepted Talos-extension base, while the
 separate builder input tree identifies the exact executable recipe even though
@@ -70,6 +73,8 @@ Run the source-only gates:
 ```bash
 ./hack/codewire-confidential-storage/build.sh verify
 ./hack/codewire-confidential-storage/build.sh plan
+./hack/codewire-confidential-storage/build.sh verify-guest-source /path/to/guest-components
+./hack/codewire-confidential-storage/build.sh verify-guest-publication
 ./hack/codewire-confidential-storage/build.sh verify-trustee-sources /path/to/trustee
 ./hack/codewire-confidential-storage/build.sh verify-trustee-publications
 python3 -m unittest discover -s hack/codewire-confidential-storage/tests -p 'test_*.py'
@@ -82,11 +87,14 @@ To re-check the public immutable archives:
 ./hack/codewire-confidential-storage/build.sh fetch-archives /tmp/codewire-source-cache
 ```
 
-`verify-trustee-publications` resolves every source-derived tag back to the
-locked index digest, selects the exact amd64 manifest, and checks the downstream
-KBS attestation manifest's SPDX and SLSA layer digests. It is the networked
-counterpart to the local source/recipe oracle; neither command publishes or
-mutates registry state.
+`verify-guest-publication` resolves the source-derived tag to its locked
+manifest, checks the exact source labels, and verifies the locked SPDX and SLSA
+Sigstore bundles bind both that manifest and the downstream source commit.
+`verify-trustee-publications` resolves every distinct source-derived tag back to
+the locked index digest, selects the exact amd64 manifest, and checks the
+combined KBS/RVPS image's SPDX and SLSA layers. They are the networked
+counterparts to the local source/recipe oracles; none of these commands
+publishes or mutates registry state.
 
 The expensive amd64 recipe is deliberately separate from publication:
 
