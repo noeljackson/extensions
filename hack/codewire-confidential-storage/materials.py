@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import argparse
+import base64
+import binascii
 import contextlib
 import datetime as dt
 import hashlib
@@ -16,10 +18,11 @@ import struct
 import subprocess
 import sys
 import tarfile
-import tomllib
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
+
+import tomllib
 
 SCHEMA = "codewire.confidential-storage.sources/v2"
 SOURCE_NAMES = {
@@ -28,23 +31,51 @@ SOURCE_NAMES = {
     "kata_containers",
     "trustee",
     "trustee_attestation_service",
-    "trustee_rvps",
 }
 TRUSTEE_IMAGE_NAMES = {"attestation_service", "kbs", "rvps"}
+COMBINED_TRUSTEE_IMAGE_NAMES = {"kbs", "rvps"}
 TRUSTEE_IMAGE_SOURCES = {
     "attestation_service": "trustee_attestation_service",
     "kbs": "trustee",
-    "rvps": "trustee_rvps",
+    "rvps": "trustee",
 }
 TRUSTEE_IMAGE_REPOSITORIES = {
     "attestation_service": "ghcr.io/confidential-containers/staged-images/coco-as-grpc",
     "kbs": "ghcr.io/noeljackson/staged-images/kbs-grpc-as",
-    "rvps": "ghcr.io/confidential-containers/staged-images/rvps",
+    "rvps": "ghcr.io/noeljackson/staged-images/kbs-grpc-as",
 }
 TRUSTEE_IMAGE_DOCKERFILES = {
     "attestation_service": "attestation-service/docker/as-grpc/Dockerfile",
     "kbs": "kbs/docker/coco-as-grpc/Dockerfile",
-    "rvps": "rvps/docker/Dockerfile",
+    "rvps": "kbs/docker/coco-as-grpc/Dockerfile",
+}
+GUEST_IMAGE_NAMES = {"container", "disk"}
+GUEST_IMAGE_REPOSITORY_SUFFIXES = {
+    "container": "coco-extension",
+    "disk": "coco-extension-disk",
+}
+GUEST_IMAGE_DOCKERFILES = {
+    "container": "tools/coco-extension/Dockerfile",
+    "disk": "tools/coco-extension/build-erofs-image.sh",
+}
+GUEST_IMAGE_BUILD_FILES = {
+    "container": {
+        ".github/workflows/coco-extension-image.yml",
+        "tools/coco-extension/Dockerfile",
+        "tools/coco-extension/test-publication-contract.sh",
+    },
+    "disk": {
+        ".github/workflows/coco-extension-image.yml",
+        "tools/coco-extension/build-erofs-image.sh",
+        "tools/coco-extension/test-publication-contract.sh",
+    },
+}
+GUEST_IMAGE_ATTESTATION_PREDICATES = {
+    "container": {
+        "provenance": "https://slsa.dev/provenance/v1",
+        "sbom": "https://spdx.dev/Document/v2.3",
+    },
+    "disk": {"provenance": "https://slsa.dev/provenance/v1"},
 }
 BUILDER_INPUT_FILES = {
     "hack/codewire-confidential-storage/base-rootfs.Dockerfile",
@@ -184,7 +215,11 @@ def validate_trustee_image(name: str, image: Any, sources: dict[str, Any]) -> No
     )
 
     reference = image["reference"]
-    if not isinstance(reference, str) or not OCI_DIGEST.fullmatch(reference):
+    if (
+        not isinstance(reference, str)
+        or not OCI_DIGEST.fullmatch(reference)
+        or reference.endswith("@sha256:" + "0" * 64)
+    ):
         raise MaterialError(
             f"Trustee image {name} must use an immutable digest reference"
         )
@@ -204,7 +239,7 @@ def validate_trustee_image(name: str, image: Any, sources: dict[str, Any]) -> No
     if not isinstance(published_tag, str) or not OCI_TAG.fullmatch(published_tag):
         raise MaterialError(f"Trustee image {name} publication tag is invalid")
     expected_tag = source["revision"]
-    if name == "kbs":
+    if name in COMBINED_TRUSTEE_IMAGE_NAMES:
         expected_tag = f"v0.21.0-path-acl-{source['revision'][:12]}"
     if published_tag != expected_tag:
         raise MaterialError(
@@ -230,11 +265,11 @@ def validate_trustee_image(name: str, image: Any, sources: dict[str, Any]) -> No
     attestations = image["attestations"]
     if not isinstance(attestations, dict):
         raise MaterialError(f"Trustee image {name} attestations must be an object")
-    if name == "kbs":
+    if name in COMBINED_TRUSTEE_IMAGE_NAMES:
         require_keys(
             attestations,
             {"manifest", "provenance", "sbom"},
-            "Trustee image kbs attestations",
+            f"Trustee image {name} attestations",
         )
         for attestation_name, digest in attestations.items():
             if not isinstance(digest, str) or not SHA256_DIGEST.fullmatch(digest):
@@ -245,6 +280,96 @@ def validate_trustee_image(name: str, image: Any, sources: dict[str, Any]) -> No
         raise MaterialError(
             f"Trustee image {name} must not claim unavailable embedded attestations"
         )
+
+
+def validate_guest_components_image(
+    name: str, image: Any, sources: dict[str, Any]
+) -> None:
+    if not isinstance(image, dict):
+        raise MaterialError(
+            "Guest Components image must bind source and publication evidence"
+        )
+    require_keys(
+        image,
+        {
+            "reference",
+            "published_tag",
+            "platform",
+            "source",
+            "dockerfile",
+            "build_files",
+            "attestations",
+        },
+        f"Guest Components {name} image",
+    )
+
+    reference = image["reference"]
+    if not isinstance(reference, str) or not OCI_DIGEST.fullmatch(reference):
+        raise MaterialError(
+            f"Guest Components {name} image must use an immutable digest reference"
+        )
+    source_name = image["source"]
+    if source_name != "guest_components":
+        raise MaterialError("Guest Components image must use guest_components source")
+    source = sources[source_name]
+    expected_repository = (
+        f"ghcr.io/{source['repository'].removeprefix('https://github.com/').lower()}/"
+        f"{GUEST_IMAGE_REPOSITORY_SUFFIXES[name]}"
+    )
+    repository, _ = reference.split("@", 1)
+    if repository != expected_repository:
+        raise MaterialError(
+            f"Guest Components {name} image repository does not match its locked source"
+        )
+    expected_tag = f"{source['revision']}-ubuntu26.04-amd64"
+    if image["published_tag"] != expected_tag:
+        raise MaterialError(
+            f"Guest Components {name} image publication tag does not bind "
+            "its source revision"
+        )
+    if image["platform"] != "linux/amd64":
+        raise MaterialError(
+            f"Guest Components {name} image must bind the linux/amd64 platform"
+        )
+    if image["dockerfile"] != GUEST_IMAGE_DOCKERFILES[name]:
+        raise MaterialError(f"Guest Components {name} image recipe is not accepted")
+    validate_input_files(image["build_files"], f"Guest Components {name} image")
+    if set(image["build_files"]) != GUEST_IMAGE_BUILD_FILES[name]:
+        raise MaterialError(
+            f"Guest Components {name} image build_files must be exactly "
+            f"{sorted(GUEST_IMAGE_BUILD_FILES[name])}"
+        )
+
+    attestations = image["attestations"]
+    if not isinstance(attestations, dict):
+        raise MaterialError("Guest Components image attestations must be an object")
+    predicates = GUEST_IMAGE_ATTESTATION_PREDICATES[name]
+    require_keys(
+        attestations,
+        set(predicates),
+        f"Guest Components {name} image attestations",
+    )
+    for attestation_name, attestation in attestations.items():
+        if not isinstance(attestation, dict):
+            raise MaterialError(
+                f"Guest Components image {attestation_name} attestation must be "
+                "an object"
+            )
+        require_keys(
+            attestation,
+            {"manifest", "bundle"},
+            f"Guest Components image {attestation_name} attestation",
+        )
+        for field, digest in attestation.items():
+            if (
+                not isinstance(digest, str)
+                or not SHA256_DIGEST.fullmatch(digest)
+                or digest == "sha256:" + "0" * 64
+            ):
+                raise MaterialError(
+                    "Guest Components image "
+                    f"{attestation_name} {field} digest is invalid"
+                )
 
 
 def input_tree_digest(input_files: dict[str, str]) -> str:
@@ -263,6 +388,7 @@ def validate_lock(lock: dict[str, Any]) -> None:
             "sources",
             "builder",
             "base_images",
+            "guest_components_images",
             "trustee_images",
             "talos_extensions",
             "kata_build_contract",
@@ -322,6 +448,13 @@ def validate_lock(lock: dict[str, Any]) -> None:
         base_images["kata_talos_extension"],
     ):
         raise MaterialError("Kata Talos base image must be its exact GHCR digest")
+    guest_images = lock["guest_components_images"]
+    if not isinstance(guest_images, dict) or set(guest_images) != GUEST_IMAGE_NAMES:
+        raise MaterialError(
+            f"guest_components_images must be exactly {sorted(GUEST_IMAGE_NAMES)}"
+        )
+    for name, image in guest_images.items():
+        validate_guest_components_image(name, image, sources)
     trustee_images = lock["trustee_images"]
     if (
         not isinstance(trustee_images, dict)
@@ -332,6 +465,10 @@ def validate_lock(lock: dict[str, Any]) -> None:
         )
     for name, image in trustee_images.items():
         validate_trustee_image(name, image, sources)
+    if trustee_images["kbs"] != trustee_images["rvps"]:
+        raise MaterialError(
+            "Trustee KBS and RVPS must bind the same combined downstream image"
+        )
 
     talos = lock["talos_extensions"]
     if not isinstance(talos, dict):
@@ -595,6 +732,19 @@ def verify_trustee_image_source(
             )
 
 
+def verify_guest_components_image_source(lock: dict[str, Any], repo: Path) -> None:
+    source = lock["sources"]["guest_components"]
+    build_files: dict[str, str] = {}
+    for image in lock["guest_components_images"].values():
+        for relative, digest in image["build_files"].items():
+            previous = build_files.setdefault(relative, digest)
+            if previous != digest:
+                raise MaterialError(
+                    f"Guest Components image recipe digest differs for {relative}"
+                )
+    verify_revision_file_contract(repo, source, build_files, "Guest Components images")
+
+
 def run_skopeo(*arguments: str) -> str:
     try:
         process = subprocess.run(
@@ -633,7 +783,7 @@ def oras_blob(reference: str) -> dict[str, Any]:
             capture_output=True,
         )
     except FileNotFoundError as error:
-        raise MaterialError("oras is required to verify KBS provenance") from error
+        raise MaterialError("oras is required to verify Trustee provenance") from error
     except subprocess.CalledProcessError as error:
         detail = error.stderr.decode(errors="replace").strip()
         raise MaterialError(
@@ -648,6 +798,244 @@ def oras_blob(reference: str) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise MaterialError(f"registry returned non-object provenance for {reference}")
     return value
+
+
+def sigstore_statement(repository: str, bundle_digest: str) -> dict[str, Any]:
+    bundle = oras_blob(f"{repository}@{bundle_digest}")
+    if bundle.get("mediaType") != "application/vnd.dev.sigstore.bundle.v0.3+json":
+        raise MaterialError("Guest Components attestation is not a Sigstore bundle")
+    envelope = bundle.get("dsseEnvelope")
+    if not isinstance(envelope, dict) or envelope.get("payloadType") != (
+        "application/vnd.in-toto+json"
+    ):
+        raise MaterialError("Guest Components attestation lacks an in-toto envelope")
+    payload = envelope.get("payload")
+    signatures = envelope.get("signatures")
+    if (
+        not isinstance(payload, str)
+        or not isinstance(signatures, list)
+        or not signatures
+    ):
+        raise MaterialError("Guest Components attestation envelope is incomplete")
+    try:
+        statement = json.loads(base64.b64decode(payload, validate=True))
+    except (binascii.Error, UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise MaterialError(
+            "Guest Components attestation payload is invalid"
+        ) from error
+    if not isinstance(statement, dict):
+        raise MaterialError("Guest Components attestation statement is not an object")
+    return statement
+
+
+def oras_manifest_digest(reference: str) -> str:
+    try:
+        process = subprocess.run(
+            ["oras", "manifest", "fetch", "--descriptor", reference],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        descriptor = json.loads(process.stdout)
+    except FileNotFoundError as error:
+        raise MaterialError("oras is required to resolve Guest images") from error
+    except subprocess.CalledProcessError as error:
+        detail = error.stderr.strip() or error.stdout.strip()
+        raise MaterialError(
+            f"oras manifest fetch failed for {reference}: {detail}"
+        ) from error
+    except json.JSONDecodeError as error:
+        raise MaterialError(
+            f"registry returned an invalid descriptor for {reference}"
+        ) from error
+    digest = descriptor.get("digest") if isinstance(descriptor, dict) else None
+    if not isinstance(digest, str) or not SHA256_DIGEST.fullmatch(digest):
+        raise MaterialError(f"registry returned an invalid digest for {reference}")
+    return digest
+
+
+def verify_guest_components_image_component(
+    lock: dict[str, Any], component: str
+) -> None:
+    image = lock["guest_components_images"][component]
+    source = lock["sources"][image["source"]]
+    repository, expected_digest = image["reference"].split("@", 1)
+    tag_reference = f"{repository}:{image['published_tag']}"
+    actual_digest = oras_manifest_digest(tag_reference)
+    if actual_digest != expected_digest:
+        raise MaterialError(
+            f"Guest Components {component} image tag digest mismatch: "
+            f"expected {expected_digest}, got {actual_digest}"
+        )
+
+    manifest = skopeo_raw(image["reference"])
+    if component == "container":
+        layers = manifest.get("layers")
+        if (
+            not isinstance(layers, list)
+            or len(layers) != 1
+            or not isinstance(layers[0], dict)
+            or layers[0].get("mediaType")
+            not in {
+                "application/vnd.docker.image.rootfs.diff.tar.gzip",
+                "application/vnd.oci.image.layer.v1.tar",
+                "application/vnd.oci.image.layer.v1.tar+gzip",
+            }
+            or not isinstance(layers[0].get("digest"), str)
+            or not SHA256_DIGEST.fullmatch(layers[0]["digest"])
+        ):
+            raise MaterialError(
+                "Guest Components container image payload contract drifted"
+            )
+        config_descriptor = manifest.get("config")
+        if not isinstance(config_descriptor, dict) or not isinstance(
+            config_descriptor.get("digest"), str
+        ):
+            raise MaterialError(
+                "Guest Components container image manifest lacks its config"
+            )
+        config = oras_blob(f"{repository}@{config_descriptor['digest']}")
+        if config.get("architecture") != "amd64" or config.get("os") != "linux":
+            raise MaterialError(
+                "Guest Components container image config is not linux/amd64"
+            )
+        config_section = config.get("config")
+        labels = (
+            config_section.get("Labels") if isinstance(config_section, dict) else None
+        )
+        if not isinstance(labels, dict):
+            raise MaterialError(
+                "Guest Components container image config lacks source labels"
+            )
+        if (
+            labels.get("org.opencontainers.image.source") != source["repository"]
+            or labels.get("org.opencontainers.image.revision") != source["revision"]
+        ):
+            raise MaterialError(
+                "Guest Components container image source labels drifted"
+            )
+    else:
+        layers = manifest.get("layers")
+        expected_titles = {
+            "kata-containers-coco-extension.img",
+            "root_hash_coco-extension.txt",
+        }
+        if (
+            manifest.get("artifactType")
+            != "application/vnd.confidential-containers.coco-extension.disk"
+            or not isinstance(layers, list)
+            or len(layers) != 2
+            or {
+                layer.get("annotations", {}).get("org.opencontainers.image.title")
+                for layer in layers
+                if isinstance(layer, dict)
+                and isinstance(layer.get("annotations"), dict)
+            }
+            != expected_titles
+            or any(
+                not isinstance(layer, dict)
+                or layer.get("mediaType") != "application/vnd.oci.image.layer.v1.tar"
+                or not isinstance(layer.get("digest"), str)
+                or not SHA256_DIGEST.fullmatch(layer["digest"])
+                for layer in layers
+            )
+        ):
+            raise MaterialError("Guest Components disk image payload contract drifted")
+
+    expected_subject = expected_digest.removeprefix("sha256:")
+    expected_subject_name = repository
+    statements: dict[str, dict[str, Any]] = {}
+    for name, predicate in GUEST_IMAGE_ATTESTATION_PREDICATES[component].items():
+        locked = image["attestations"][name]
+        attestation = skopeo_raw(f"{repository}@{locked['manifest']}")
+        subject = attestation.get("subject")
+        annotations = attestation.get("annotations")
+        if (
+            attestation.get("artifactType")
+            != "application/vnd.dev.sigstore.bundle.v0.3+json"
+            or not isinstance(subject, dict)
+            or subject.get("digest") != expected_digest
+            or not isinstance(annotations, dict)
+            or annotations.get("dev.sigstore.bundle.predicateType") != predicate
+        ):
+            raise MaterialError(
+                f"Guest Components {component} image {name} attestation subject drifted"
+            )
+        layers = attestation.get("layers")
+        if (
+            not isinstance(layers, list)
+            or len(layers) != 1
+            or not isinstance(layers[0], dict)
+            or layers[0].get("mediaType")
+            != "application/vnd.dev.sigstore.bundle.v0.3+json"
+            or layers[0].get("digest") != locked["bundle"]
+        ):
+            raise MaterialError(
+                f"Guest Components {component} image {name} attestation bundle drifted"
+            )
+        statement = sigstore_statement(repository, locked["bundle"])
+        if statement.get("predicateType") != predicate:
+            raise MaterialError(
+                f"Guest Components {component} image {name} predicate type drifted"
+            )
+        subjects = statement.get("subject")
+        if not isinstance(subjects, list) or not any(
+            isinstance(subject, dict)
+            and subject.get("name") == expected_subject_name
+            and isinstance(subject.get("digest"), dict)
+            and subject["digest"].get("sha256") == expected_subject
+            for subject in subjects
+        ):
+            raise MaterialError(
+                f"Guest Components {component} image {name} does not bind its manifest"
+            )
+        statements[name] = statement
+
+    try:
+        provenance = statements["provenance"]["predicate"]
+        build_definition = provenance["buildDefinition"]
+        workflow = build_definition["externalParameters"]["workflow"]
+        dependencies = build_definition["resolvedDependencies"]
+        builder_id = provenance["runDetails"]["builder"]["id"]
+        github = build_definition["internalParameters"]["github"]
+    except (KeyError, TypeError) as error:
+        raise MaterialError(
+            f"Guest Components {component} image provenance lacks build identity"
+        ) from error
+    branch = "refs/heads/downstream/confidential-storage"
+    expected_workflow = (
+        f"{source['repository']}/.github/workflows/coco-extension-image.yml"
+    )
+    expected_dependency = f"git+{source['repository']}@{branch}"
+    if (
+        not isinstance(workflow, dict)
+        or not isinstance(dependencies, list)
+        or not isinstance(github, dict)
+        or not isinstance(builder_id, str)
+        or build_definition.get("buildType")
+        != "https://actions.github.io/buildtypes/workflow/v1"
+        or workflow.get("ref") != branch
+        or workflow.get("repository") != source["repository"]
+        or workflow.get("path") != ".github/workflows/coco-extension-image.yml"
+        or builder_id != f"{expected_workflow}@{branch}"
+        or github.get("event_name") != "push"
+        or github.get("runner_environment") != "github-hosted"
+        or not any(
+            isinstance(dependency, dict)
+            and dependency.get("uri") == expected_dependency
+            and isinstance(dependency.get("digest"), dict)
+            and dependency["digest"].get("gitCommit") == source["revision"]
+            for dependency in dependencies
+        )
+    ):
+        raise MaterialError(
+            f"Guest Components {component} image provenance source identity drifted"
+        )
+
+
+def verify_guest_components_image_publication(lock: dict[str, Any]) -> None:
+    for component in sorted(GUEST_IMAGE_NAMES):
+        verify_guest_components_image_component(lock, component)
 
 
 def verify_trustee_image_publication(lock: dict[str, Any], component: str) -> None:
@@ -682,7 +1070,7 @@ def verify_trustee_image_publication(lock: dict[str, Any], component: str) -> No
     if platform_matches[0].get("digest") != image["platform_manifest"]:
         raise MaterialError(f"Trustee image {component} platform manifest drifted")
 
-    if component != "kbs":
+    if component not in COMBINED_TRUSTEE_IMAGE_NAMES:
         return
     attestation_manifest = image["attestations"]["manifest"]
     if not any(
@@ -692,11 +1080,15 @@ def verify_trustee_image_publication(lock: dict[str, Any], component: str) -> No
         == "attestation-manifest"
         for manifest in manifests
     ):
-        raise MaterialError("Trustee image kbs lacks its locked attestation manifest")
+        raise MaterialError(
+            f"Trustee image {component} lacks its locked attestation manifest"
+        )
     attestation = skopeo_raw(f"{repository}@{attestation_manifest}")
     layers = attestation.get("layers")
     if not isinstance(layers, list):
-        raise MaterialError("Trustee image kbs attestation manifest lacks layers")
+        raise MaterialError(
+            f"Trustee image {component} attestation manifest lacks layers"
+        )
     predicates = {
         layer.get("annotations", {}).get("in-toto.io/predicate-type"): layer.get(
             "digest"
@@ -705,17 +1097,19 @@ def verify_trustee_image_publication(lock: dict[str, Any], component: str) -> No
         if isinstance(layer, dict)
     }
     if predicates.get("https://spdx.dev/Document") != image["attestations"]["sbom"]:
-        raise MaterialError("Trustee image kbs SBOM attestation drifted")
+        raise MaterialError(f"Trustee image {component} SBOM attestation drifted")
     if (
         predicates.get("https://slsa.dev/provenance/v1")
         != image["attestations"]["provenance"]
     ):
-        raise MaterialError("Trustee image kbs provenance attestation drifted")
+        raise MaterialError(f"Trustee image {component} provenance attestation drifted")
 
     source = lock["sources"][image["source"]]
     statement = oras_blob(f"{repository}@{image['attestations']['provenance']}")
     if statement.get("predicateType") != "https://slsa.dev/provenance/v1":
-        raise MaterialError("Trustee image kbs provenance predicate is not SLSA v1")
+        raise MaterialError(
+            f"Trustee image {component} provenance predicate is not SLSA v1"
+        )
     subjects = statement.get("subject")
     expected_platform_digest = image["platform_manifest"].removeprefix("sha256:")
     if not isinstance(subjects, list) or not any(
@@ -724,7 +1118,7 @@ def verify_trustee_image_publication(lock: dict[str, Any], component: str) -> No
         for subject in subjects
     ):
         raise MaterialError(
-            "Trustee image kbs provenance does not bind its platform manifest"
+            f"Trustee image {component} provenance does not bind its platform manifest"
         )
     try:
         build_definition = statement["predicate"]["buildDefinition"]
@@ -734,7 +1128,7 @@ def verify_trustee_image_publication(lock: dict[str, Any], component: str) -> No
         internal = build_definition["internalParameters"]
     except (KeyError, TypeError) as error:
         raise MaterialError(
-            "Trustee image kbs provenance lacks build identity"
+            f"Trustee image {component} provenance lacks build identity"
         ) from error
     expected_slug = source["repository"].removeprefix("https://github.com/")
     expected_workflow = (
@@ -752,7 +1146,9 @@ def verify_trustee_image_publication(lock: dict[str, Any], component: str) -> No
         or internal.get("github_ref") != "refs/heads/downstream/confidential-storage"
         or internal.get("github_event_name") != "push"
     ):
-        raise MaterialError("Trustee image kbs provenance source identity drifted")
+        raise MaterialError(
+            f"Trustee image {component} provenance source identity drifted"
+        )
 
 
 def clone_exact(
@@ -1070,6 +1466,43 @@ def emit_materials(
                 },
             }
         )
+
+    guest_source = lock["sources"]["guest_components"]
+    for component, guest_image in sorted(lock["guest_components_images"].items()):
+        guest_annotations = {
+            "component": f"guest-components-{component}-image",
+            "source": guest_image["source"],
+            "sourceRepository": guest_source["repository"],
+            "sourceRevision": guest_source["revision"],
+            "sourceTree": guest_source["tree"],
+            "publishedTag": guest_image["published_tag"],
+            "platform": guest_image["platform"],
+            "dockerfile": guest_image["dockerfile"],
+        }
+        for name, attestation in sorted(guest_image["attestations"].items()):
+            for kind, digest in sorted(attestation.items()):
+                guest_annotations[f"{name}{kind.title()}Attestation"] = digest
+        resolved.append(
+            {
+                "uri": guest_image["reference"].split("@", 1)[0],
+                "digest": {"sha256": guest_image["reference"].rsplit(":", 1)[1]},
+                "annotations": guest_annotations,
+            }
+        )
+        for relative, digest in sorted(guest_image["build_files"].items()):
+            resolved.append(
+                {
+                    "uri": (
+                        f"git+{guest_source['repository']}.git@"
+                        f"{guest_source['revision']}#{relative}"
+                    ),
+                    "digest": {"sha256": digest},
+                    "annotations": {
+                        "component": f"guest-components-{component}-image",
+                        "role": "build-recipe",
+                    },
+                }
+            )
 
     for name, image in sorted(lock["trustee_images"].items()):
         source = lock["sources"][image["source"]]
@@ -1800,6 +2233,11 @@ def build_parser() -> argparse.ArgumentParser:
     verify_builder_parser = subparsers.add_parser("verify-builder")
     verify_builder_parser.add_argument("--repo", required=True, type=Path)
 
+    guest_image_source = subparsers.add_parser("verify-guest-image-source")
+    guest_image_source.add_argument("--repo", required=True, type=Path)
+
+    subparsers.add_parser("verify-guest-image-publication")
+
     trustee_image_source = subparsers.add_parser("verify-trustee-image-source")
     trustee_image_source.add_argument(
         "--component", required=True, choices=sorted(TRUSTEE_IMAGE_NAMES)
@@ -1847,6 +2285,12 @@ def main() -> int:
         elif args.command == "verify-builder":
             verify_builder(lock, args.repo)
             print("extension builder checkout matches the locked input tree")
+        elif args.command == "verify-guest-image-source":
+            verify_guest_components_image_source(lock, args.repo)
+            print("Guest Components image source and recipes match the lock")
+        elif args.command == "verify-guest-image-publication":
+            verify_guest_components_image_publication(lock)
+            print("Guest Components image publication matches the lock")
         elif args.command == "verify-trustee-image-source":
             verify_trustee_image_source(lock, args.component, args.repo)
             print(f"Trustee image {args.component} source and recipes match the lock")

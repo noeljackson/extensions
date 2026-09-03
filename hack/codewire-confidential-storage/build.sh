@@ -19,7 +19,6 @@ source_names=(
   kata_containers
   trustee
   trustee_attestation_service
-  trustee_rvps
 )
 kata_parallel_targets=(
   agent-tarball
@@ -59,6 +58,10 @@ Commands:
       Validate the source lock and emit deterministic source SBOM/provenance.
   fetch-archives CACHE_DIR
       Download every immutable source archive and verify SHA-256 plus SHA-512.
+  verify-guest-source GUEST_COMPONENTS_REPOSITORY
+      Verify the Guest image recipes against their exact source commit.
+  verify-guest-publication
+      Verify both Guest tags/manifests plus source labels, SBOM, and provenance.
   verify-trustee-sources TRUSTEE_REPOSITORY
       Verify every consumed Trustee image recipe against its exact source commit.
   verify-trustee-publications
@@ -104,17 +107,11 @@ verify_builder_checkout() {
 }
 
 verify_guest_components_artifact() {
-  local repository revision variant slug reference
-  repository="$(lock_value '.sources.guest_components.repository')"
-  revision="$(lock_value '.sources.guest_components.revision')"
-  variant="$(lock_value '.kata_build_contract.guest_artifact_variant')"
-  slug="${repository#https://github.com/}"
-  [[ "$slug" != "$repository" && "$slug" == */* && "$slug" != */*/* ]] ||
-    die "guest-components repository cannot be mapped to its GHCR package"
-  reference="ghcr.io/${slug,,}/coco-extension:${revision}-${variant}-amd64"
-  docker buildx imagetools inspect "$reference" >/dev/null 2>&1 ||
-    die "required guest-components artifact is not anonymously readable: $reference"
-  printf 'guest-components artifact available: %s\n' "$reference"
+  require_command oras
+  require_command python3
+  require_command skopeo
+  python3 "$materials_tool" --lock "$lock_file" \
+    verify-guest-image-publication
 }
 
 remove_tree() {
@@ -532,10 +529,24 @@ case "$command" in
     python3 "$materials_tool" --lock "$lock_file" verify-archives --cache "$cache_dir"
     ;;
 
+  verify-guest-source)
+    [[ $# -eq 2 ]] || die "verify-guest-source requires GUEST_COMPONENTS_REPOSITORY"
+    verify_builder_checkout
+    python3 "$materials_tool" --lock "$lock_file" verify-guest-image-source \
+      --repo "$2"
+    ;;
+
+  verify-guest-publication)
+    [[ $# -eq 1 ]] || die "verify-guest-publication takes no arguments"
+    verify_builder_checkout
+    verify_guest_components_artifact
+    ;;
+
   verify-trustee-sources)
     [[ $# -eq 2 ]] || die "verify-trustee-sources requires TRUSTEE_REPOSITORY"
     verify_builder_checkout
-    for component in attestation_service kbs rvps; do
+    # KBS and RVPS are two entrypoints in the same locked combined image.
+    for component in attestation_service kbs; do
       python3 "$materials_tool" --lock "$lock_file" verify-trustee-image-source \
         --component "$component" --repo "$2"
     done
@@ -546,7 +557,8 @@ case "$command" in
     verify_builder_checkout
     require_command oras
     require_command skopeo
-    for component in attestation_service kbs rvps; do
+    # Lock validation requires RVPS to be byte-for-byte identical to KBS.
+    for component in attestation_service kbs; do
       python3 "$materials_tool" --lock "$lock_file" \
         verify-trustee-image-publication --component "$component"
     done

@@ -3,7 +3,7 @@
   "platforms": [
     "linux/amd64"
   ],
-  "source_date_epoch": 1788370522,
+  "source_date_epoch": 1788426760,
   "sources": {
     "extensions": {
       "repository": "https://github.com/noeljackson/extensions",
@@ -18,13 +18,13 @@
     },
     "guest_components": {
       "repository": "https://github.com/noeljackson/guest-components",
-      "revision": "60e8f1cec981db876acc9c5616f638adb19eaf85",
-      "tree": "b271dcc4169246f9944ed13380b43d68be749708",
-      "source_date_epoch": 1788368586,
+      "revision": "d7c74a521fb1723b471a161be4692f2a712243e0",
+      "tree": "3b1ef55662c34cb3183043626c848629be8cf600",
+      "source_date_epoch": 1788426760,
       "archive": {
-        "url": "https://codeload.github.com/noeljackson/guest-components/tar.gz/60e8f1cec981db876acc9c5616f638adb19eaf85",
-        "sha256": "a8445469aace3dd032b2fbd99b7eab0593a074eebbaa57479255a59aa40950fa",
-        "sha512": "f595b40bb9ee887c798a8ef43fafe33cdd69b6cdd2645a4dbd535c3aa810540ccaf19f5635698e8e897e425bd401a98621c82647513d088a7425d4a8106a3f24"
+        "url": "https://codeload.github.com/noeljackson/guest-components/tar.gz/d7c74a521fb1723b471a161be4692f2a712243e0",
+        "sha256": "2ea3b675b95af677b158e844376e1c9e676e0ed2d4b73fa80e2f05c674d30a24",
+        "sha512": "a553176a87db58b8e2b4cd7a89d3c99d05dec31a0440a86a7693208d7c906cb593482964b72f59705187aa9c9b925dc6f309263dba7d7dcfaae46af940612abb"
       }
     },
     "kata_containers": {
@@ -40,13 +40,13 @@
     },
     "trustee": {
       "repository": "https://github.com/noeljackson/trustee",
-      "revision": "d8ffc4c95be05af4232bbf0b70d10bc94e0dad0b",
-      "tree": "9ca0cfb6f82322027105376b209eaeb596735c48",
-      "source_date_epoch": 1788361442,
+      "revision": "084ab0cf09132de0dda17d5aec984e039d3fc634",
+      "tree": "c679e05a4d818c7bf7d288fe58c171697f9ab6a6",
+      "source_date_epoch": 1788387218,
       "archive": {
-        "url": "https://codeload.github.com/noeljackson/trustee/tar.gz/d8ffc4c95be05af4232bbf0b70d10bc94e0dad0b",
-        "sha256": "df24666c9cb45500daff818a4036790b3d7e51688515c734ae67e985fd2cff94",
-        "sha512": "6ca935fc8b777cd267804f41b1430213b48b32457269444471fc4901fa968a766d1c2c19e5aceab3714ed0c4eda8eb5bd75efbce95b71689f3b991a30042abd1"
+        "url": "https://codeload.github.com/noeljackson/trustee/tar.gz/084ab0cf09132de0dda17d5aec984e039d3fc634",
+        "sha256": "66bab7e0c2ecbb2bac779761a0d0263e46f1f66b789207a6f5a64e2e4a22c45a",
+        "sha512": "88c17d0344df4c9735f3931ebd1058280e710c4d500396d1832eaf81f08a5b2d332517aae4b88aac40a77ad968186a467350e29b3a4bdb9ebd61ce656db20c7b"
       }
     },
     "trustee_attestation_service": {
@@ -59,33 +59,64 @@
         "sha256": "9c492c73ed659f7970b64612fbe9d1e30d3dad9afe7ebd1e0b6fa9b5327f3c8a",
         "sha512": "258d110eab12af7bfb69868771517d66b592bf94ca951dd4f307c06602beda83428e6a15df150f84f7e6edd77b2a6f79bda46c5ad4f9792285f076fa3d13a590"
       }
-    },
-    "trustee_rvps": {
-      "repository": "https://github.com/confidential-containers/trustee",
-      "revision": "258ea4acb7b9bd865fce5c63a539f2120dba8298",
-      "tree": "1d4368226a1d95ff4f30d6e9c5496595632e29cf",
-      "source_date_epoch": 1784216580,
-      "archive": {
-        "url": "https://codeload.github.com/confidential-containers/trustee/tar.gz/258ea4acb7b9bd865fce5c63a539f2120dba8298",
-        "sha256": "28a03820f4dc7b2e38c82146a55ab8c6ac046d8775ce3ec5f48ffc7878922268",
-        "sha512": "154708acaa9598d3fc765bfa166daa9f8ac1d6929d8b10e01fde0f7f62c682a14b1160450249c1330a551de8095f430171e437b85b0386bbfd34ee9e7e7da25e"
-      }
     }
   },
   "builder": {
     "source": "extensions",
-    "input_tree_sha256": "d8b6275157a4457188db6e8be8df59df40908645ee92778621bce491fa569000",
+    "input_tree_sha256": "87aeadfef53c3e9ed0478f6974f01680edfbb010ff7194e9149bbcc9154c7152",
     "input_files": {
       "hack/codewire-confidential-storage/base-rootfs.Dockerfile": "b5d07e12cbee83b0992cca3f2e8dee28bac8655cc96bbc1bb989adcadb70f04e",
-      "hack/codewire-confidential-storage/build.sh": "0474018ffa9672f9e0587d53e862ab51e21d1f2ba1adfca519c03503706f5d7a",
+      "hack/codewire-confidential-storage/build.sh": "188ef63520d310e6d0742b76e8c33fe4221c1856b6d151bf01d25f9bdc2e7eb0",
       "hack/codewire-confidential-storage/extension.Dockerfile": "bf4076833de8e2e4e71e7f6030995962ba30c95acb1dd4de5c7f02ac5616bc35",
-      "hack/codewire-confidential-storage/materials.py": "bc6f70ba5c69954ee4ae0e24c51f05a2dfc7ae501cb3a429eca576d2ecf788c8",
+      "hack/codewire-confidential-storage/materials.py": "7ac1c0a67863b0c622629f66e147dd3ca3b9e79c4b86eff8436e3c9ce67b7344",
       "hack/codewire-confidential-storage/qemu-tcg-boot-smoke": "a6543653fb78f9e4fbd46a49ac61cd46f36e1457209b16880ab9715a90439d71"
     }
   },
   "base_images": {
     "buildkit_sbom_scanner": "docker.io/docker/buildkit-syft-scanner@sha256:79e7b013cbec16bbb436f312819a49a4a57752b2270c1a9332ae1a10fcc82a68",
     "kata_talos_extension": "ghcr.io/noeljackson/kata-containers@sha256:fe31430b386e55bed7bc88464ae3095f1e9ea467a99305db4f4e4cca4acf1d69"
+  },
+  "guest_components_images": {
+    "container": {
+      "reference": "ghcr.io/noeljackson/guest-components/coco-extension@sha256:de72f72a634ba7099cbc0317a19124bcc08697bd5e025b8be9d2bb5bb9b7bfca",
+      "published_tag": "d7c74a521fb1723b471a161be4692f2a712243e0-ubuntu26.04-amd64",
+      "platform": "linux/amd64",
+      "source": "guest_components",
+      "dockerfile": "tools/coco-extension/Dockerfile",
+      "build_files": {
+        ".github/workflows/coco-extension-image.yml": "83e56f64ffd7417a4b06d7904d179ac639a57a505fe1c4315f5c8fd44a74742b",
+        "tools/coco-extension/Dockerfile": "ae46ee9f550419d8abbf35cabbb2656fde625b2bc2dda87a7d50a7a06afff02c",
+        "tools/coco-extension/test-publication-contract.sh": "8e4eec4864c54c6ea351e42646e90fbb94f6641816a311d1e2fb32816d72f24c"
+      },
+      "attestations": {
+        "provenance": {
+          "manifest": "sha256:d77da44d9d3cbf051628e26a6ece5711716b2172017f46d0ef6dc09ebd309ea5",
+          "bundle": "sha256:72839e9fcb761ce736e016305dc4fdfd1b1711c92812d7874f62542833c1e000"
+        },
+        "sbom": {
+          "manifest": "sha256:cc34b0a4203a64aa32de0d58cb47ff2617516dcc3faf98c7d71d4c0f0827ec65",
+          "bundle": "sha256:baf49b1d7345face74dcaaef52020798e4b969661a8d9f8e94537cd05ba48609"
+        }
+      }
+    },
+    "disk": {
+      "reference": "ghcr.io/noeljackson/guest-components/coco-extension-disk@sha256:6f13edb1dc728ec3eda4419c9011bb6a8adf6cf2b60db535b4976390d0cb717c",
+      "published_tag": "d7c74a521fb1723b471a161be4692f2a712243e0-ubuntu26.04-amd64",
+      "platform": "linux/amd64",
+      "source": "guest_components",
+      "dockerfile": "tools/coco-extension/build-erofs-image.sh",
+      "build_files": {
+        ".github/workflows/coco-extension-image.yml": "83e56f64ffd7417a4b06d7904d179ac639a57a505fe1c4315f5c8fd44a74742b",
+        "tools/coco-extension/build-erofs-image.sh": "fd840c5a6cecdb147f7485ad3a1fafbec9095a21a95c582ec88a7ae1c51be2aa",
+        "tools/coco-extension/test-publication-contract.sh": "8e4eec4864c54c6ea351e42646e90fbb94f6641816a311d1e2fb32816d72f24c"
+      },
+      "attestations": {
+        "provenance": {
+          "manifest": "sha256:96045f41eb9acbecc913266ee09f4a8201786441d6fc816e94e0c2b615f80d9e",
+          "bundle": "sha256:f7686cb8cea7a79ba47a606cc978bf3fa59a742ee7975eb7550f4c3d8fd09ccc"
+        }
+      }
+    }
   },
   "trustee_images": {
     "attestation_service": {
@@ -104,36 +135,38 @@
       "attestations": {}
     },
     "kbs": {
-      "reference": "ghcr.io/noeljackson/staged-images/kbs-grpc-as@sha256:dd8eb5502534363ebf3cdb4b4f52632ba707f09a1194ae641a5164c85664e387",
-      "published_tag": "v0.21.0-path-acl-d8ffc4c95be0",
+      "reference": "ghcr.io/noeljackson/staged-images/kbs-grpc-as@sha256:62b54b4bf10eabca7be3a1c93cf4b772b935f3cdb87d8c96c873b256046d79ab",
+      "published_tag": "v0.21.0-path-acl-084ab0cf0913",
       "platform": "linux/amd64",
-      "platform_manifest": "sha256:af8ff2b648d8e7dec42e137141c42bd40987029be1a0affdaa88f143713ed5ff",
+      "platform_manifest": "sha256:15cdb0f961d945bb740960c5f5877201a58b233ab6f1b451afe1c176e6dcd6da",
       "source": "trustee",
       "dockerfile": "kbs/docker/coco-as-grpc/Dockerfile",
       "build_files": {
         ".github/workflows/downstream-kbs-grpc-as.yml": "b608227b8d2c24c01681f3bcfec29052da5137af92578af30a3615ebbe6457bf",
-        "kbs/docker/coco-as-grpc/Dockerfile": "bf8d07515cae37ae776a8b9076e67dbebf6278a455acf50e2f94c709132ffe4d"
+        "kbs/docker/coco-as-grpc/Dockerfile": "0c3ba8ec4b5621b57ecf17b68037e8535881670af7d1ecebeea86a7e25d0dc37"
       },
       "attestations": {
-        "manifest": "sha256:ba5adff957451bffb73bfc10e90c7a8d4d65714a620d381cd25e8e5235ac3f45",
-        "provenance": "sha256:3735986ec587727223889829f2a530e31f89c33097937b193cbafe10a1558688",
-        "sbom": "sha256:f96fafc1900745182e2ff1174226f55f37795804eea3556e81a27e0b448e3be4"
+        "manifest": "sha256:c9099e524266244358aa69c11d19728f7c9f846ec5963c30d10687a8086f74b1",
+        "provenance": "sha256:b4290f23c8e5fed6824dc0cc31d1f92d7c0cd41c4bea2b9bef6e611e6d37f6a5",
+        "sbom": "sha256:8d62eff51b620ed3e53e3af2d55083a0bf106f9b7294c371f1199bba5845a504"
       }
     },
     "rvps": {
-      "reference": "ghcr.io/confidential-containers/staged-images/rvps@sha256:185cdc6754e544de3068a4f9c25733d62e7e6cfb8464da9f2de2ac490573b509",
-      "published_tag": "258ea4acb7b9bd865fce5c63a539f2120dba8298",
+      "reference": "ghcr.io/noeljackson/staged-images/kbs-grpc-as@sha256:62b54b4bf10eabca7be3a1c93cf4b772b935f3cdb87d8c96c873b256046d79ab",
+      "published_tag": "v0.21.0-path-acl-084ab0cf0913",
       "platform": "linux/amd64",
-      "platform_manifest": "sha256:3c478488eaf1b8a7b6580128ccf960ad4a5e4f000af5c3089c863275a1fea84a",
-      "source": "trustee_rvps",
-      "dockerfile": "rvps/docker/Dockerfile",
+      "platform_manifest": "sha256:15cdb0f961d945bb740960c5f5877201a58b233ab6f1b451afe1c176e6dcd6da",
+      "source": "trustee",
+      "dockerfile": "kbs/docker/coco-as-grpc/Dockerfile",
       "build_files": {
-        ".github/actions/build-single-image/action.yml": "3be08a7a1ca7fe4f18345e04ac42ca623a3b976558b9d10872a5574e31d95316",
-        ".github/workflows/build-and-push-staged-images.yml": "2d40f4578c24b87562bb8775f6c1950572bed1550a78cefe8a5cd87b81b4ed50",
-        ".github/workflows/workflow-call-build-staged-images-push.yml": "ffc36f6ff6168c5db5dba2b9b75e4cd9886db7a7928189c0ce9535fbf3236338",
-        "rvps/docker/Dockerfile": "a4ddec7808b6d1fd48c872698b81932f691fb86256d57ab10588a135115c5de8"
+        ".github/workflows/downstream-kbs-grpc-as.yml": "b608227b8d2c24c01681f3bcfec29052da5137af92578af30a3615ebbe6457bf",
+        "kbs/docker/coco-as-grpc/Dockerfile": "0c3ba8ec4b5621b57ecf17b68037e8535881670af7d1ecebeea86a7e25d0dc37"
       },
-      "attestations": {}
+      "attestations": {
+        "manifest": "sha256:c9099e524266244358aa69c11d19728f7c9f846ec5963c30d10687a8086f74b1",
+        "provenance": "sha256:b4290f23c8e5fed6824dc0cc31d1f92d7c0cd41c4bea2b9bef6e611e6d37f6a5",
+        "sbom": "sha256:8d62eff51b620ed3e53e3af2d55083a0bf106f9b7294c371f1199bba5845a504"
+      }
     }
   },
   "talos_extensions": {
