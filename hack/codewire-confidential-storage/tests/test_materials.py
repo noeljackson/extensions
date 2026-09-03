@@ -31,20 +31,20 @@ class MaterialTests(unittest.TestCase):
     def test_canonical_lock_binds_accepted_sources(self) -> None:
         expected = {
             "extensions": (
-                "e94fcc06e8c8e452c286bb07c7ac5c08372114da",
-                "baae8af79ca2e123c86288a2f7fc2b89a95accdf",
+                "0a825ae60fef6838a98edb7bca661d285e0426d9",
+                "3753e0b7b3a338587ee89b330abe486afad4b41b",
             ),
             "guest_components": (
-                "d7c74a521fb1723b471a161be4692f2a712243e0",
-                "3b1ef55662c34cb3183043626c848629be8cf600",
+                "e75bf464c533058b650634a1158e87708f7fe375",
+                "d98c15b06291cb83a3f6f8fce7eaf435c76211ed",
             ),
             "kata_containers": (
-                "08a49558c321f5aabfd9f86621d5e1d2bd0a8e18",
-                "e8bdfd905aa430e9edbc4a3119e018277c83ed2e",
+                "d40d8c27572803e787a061a01a2228b35b7246d3",
+                "e7417e18fb7181d2296455363647e33cbf153cab",
             ),
             "trustee": (
-                "084ab0cf09132de0dda17d5aec984e039d3fc634",
-                "c679e05a4d818c7bf7d288fe58c171697f9ab6a6",
+                "bc76377e5a694d03a122ecf3f8272a0889dd9371",
+                "621a0b2fb38f6e64526f4f1e5ba553718fb94039",
             ),
             "trustee_attestation_service": (
                 "6bb2f94d534274489ce41e7023fdd0e559d9f80c",
@@ -911,7 +911,7 @@ class MaterialTests(unittest.TestCase):
                 )
                 text = (first / name).read_text(encoding="utf-8")
                 self.assertNotRegex(text.lower(), r"password|private_key|admin_token")
-                self.assertIn("08a49558c321f5aabfd9f86621d5e1d2bd0a8e18", text)
+                self.assertIn("d40d8c27572803e787a061a01a2228b35b7246d3", text)
             provenance = json.loads(
                 (first / "provenance.in-toto.json").read_text(encoding="utf-8")
             )
@@ -943,11 +943,11 @@ class MaterialTests(unittest.TestCase):
             )
             self.assertEqual(
                 kbs["annotations"]["sourceRevision"],
-                "084ab0cf09132de0dda17d5aec984e039d3fc634",
+                "bc76377e5a694d03a122ecf3f8272a0889dd9371",
             )
             self.assertEqual(
                 kbs["annotations"]["provenanceAttestation"],
-                "sha256:b4290f23c8e5fed6824dc0cc31d1f92d7c0cd41c4bea2b9bef6e611e6d37f6a5",
+                "sha256:3af3a1391a954a6554d9c1c9b391fdfb121eb76190c0510d6b1a56ba84411ff6",
             )
             self.assertTrue(
                 any(
