@@ -105,6 +105,7 @@ verify_publisher() {
 
 verify_workflow "${workflow}"
 verify_publisher
+"${script_dir}/test-qemu-tcg-boot-smoke.sh"
 
 # The previous source-only/main-only shape cannot satisfy this deployment contract.
 sed 's/downstream\/confidential-storage/main/g' "${workflow}" >"${test_root}/candidate.yml"

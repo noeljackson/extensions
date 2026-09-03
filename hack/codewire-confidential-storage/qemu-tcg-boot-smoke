@@ -14,7 +14,7 @@ require_command() {
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-for command in jq python3 qemu-system-x86_64 sed skopeo tar timeout; do
+for command in jq python3 qemu-system-x86_64 readlink realpath sed skopeo tail tar timeout; do
   require_command "$command"
 done
 
@@ -68,6 +68,19 @@ tar -xzf "$layer" -C "$work_dir" \
   "$payload/root_hash_confidential.txt" \
   "$payload/root_hash_coco-extension.txt" \
   "$payload/vmlinuz.container"
+kernel="$work_dir/$payload/vmlinuz.container"
+if [[ -L "$kernel" ]]; then
+  kernel_target="$(readlink -- "$kernel")" \
+    || die "could not read the packaged kernel symlink"
+  [[ "$kernel_target" =~ ^vmlinuz-[A-Za-z0-9][A-Za-z0-9._+-]*$ ]] \
+    || die "packaged kernel symlink target is not a safe in-package kernel name"
+  tar -xzf "$layer" -C "$work_dir" "$payload/$kernel_target"
+fi
+kernel_resolved="$(realpath -e -- "$kernel")" \
+  || die "packaged kernel does not resolve to an extracted file"
+[[ -f "$kernel_resolved" ]] || die "packaged kernel target is not a regular file"
+[[ "$kernel_resolved" == "$work_dir/$payload/"* ]] \
+  || die "packaged kernel resolves outside the immutable Kata payload"
 chmod -R go-rwx "$work_dir"
 payload="$work_dir/$payload"
 
@@ -143,6 +156,23 @@ hash_block_size=${boot_values[4]}
 coco_params=${boot_values[5]}
 sectors=${boot_values[6]}
 
+initdata_image="$work_dir/initdata.image"
+python3 - "$initdata_image" <<'PY'
+import gzip
+import pathlib
+import struct
+import sys
+
+raw = b'algorithm = "sha256"\nversion = "0.1.0"\n\n[data]\n'
+compressed = gzip.compress(raw, compresslevel=9, mtime=0)
+image = b"initdata" + struct.pack("<Q", len(compressed)) + compressed
+image += b"\0" * ((512 - len(image) % 512) % 512)
+path = pathlib.Path(sys.argv[1])
+path.write_bytes(image)
+path.chmod(0o600)
+PY
+[[ -s "$initdata_image" ]] || die "could not create the canonical TCG Init-Data image"
+
 raw_log="$work_dir/tcg-boot.log"
 clean_log="$work_dir/tcg-boot.clean.log"
 qemu_log="$work_dir/qemu.log"
@@ -157,31 +187,56 @@ timeout --signal=TERM "${horizon}s" qemu-system-x86_64 \
   -display none \
   -monitor none \
   -serial "file:$raw_log" \
-  -kernel "$payload/vmlinuz.container" \
+  -kernel "$kernel" \
   -append "reboot=k panic=1 systemd.unit=kata-containers.target systemd.mask=systemd-networkd.service systemd.mask=systemd-networkd.socket dm-mod.create=\"dm-verity,,,ro,0 ${sectors} verity 1 /dev/vda1 /dev/vda2 ${data_block_size} ${hash_block_size} ${data_blocks} 0 sha256 ${root_hash} ${salt}\" root=/dev/dm-0 rootflags=data=ordered,errors=remount-ro ro rootfstype=ext4 cgroup_no_v1=all systemd.unified_cgroup_hierarchy=1 selinux=1 kata.extension.coco.verity_params=${coco_params} console=ttyS0,115200 earlyprintk=serial,ttyS0,115200 ignore_loglevel systemd.log_target=console" \
   -drive "if=none,file=$payload/kata-containers-confidential.img,format=raw,id=root" \
   -device virtio-blk-pci,drive=root,serial=rootfs \
   -drive "if=none,file=$payload/kata-containers-coco-extension.img,format=raw,id=coco" \
   -device virtio-blk-pci,drive=coco,serial=extension-coco \
+  -drive "if=none,file=$initdata_image,format=raw,id=initdata,readonly=on" \
+  -device virtio-blk-pci,drive=initdata,serial=initdata \
   >"$qemu_log" 2>&1 || qemu_status=$?
 
-[[ $qemu_status -eq 124 ]] \
-  || die "guest exited before the bounded TCG observation horizon (status ${qemu_status})"
-sed -r 's/\x1B\[[0-9;?]*[ -\/]*[@-~]//g; s/\r$//' "$raw_log" >"$clean_log"
+if [[ -f "$raw_log" ]]; then
+  sed -r 's/\x1B\[[0-9;?]*[ -\/]*[@-~]//g; s/\r$//' "$raw_log" >"$clean_log"
+else
+  : >"$clean_log"
+fi
+
+fail_with_logs() {
+  local message=$1
+  if [[ -s "$qemu_log" ]]; then
+    printf 'bounded QEMU failure output follows:\n' >&2
+    tail -n 80 "$qemu_log" >&2
+  fi
+  if [[ -s "$clean_log" ]]; then
+    printf 'bounded guest serial failure output follows:\n' >&2
+    tail -n 200 "$clean_log" >&2
+  fi
+  die "$message"
+}
+
+[[ $qemu_status -eq 0 ]] \
+  || fail_with_logs "guest did not take the required TCG fail-closed path (status ${qemu_status})"
 
 required_markers=(
   'dm-0 (dm-verity) is ready'
   'Finished kata-extension-mount@coco'
   'Started kata-agent.service'
   'Reached target kata-containers.target'
-  'ttRPC server started'
+  'Initdata version: 0.1.0'
+  'Welcome to Confidential Containers Attestation Agent (ttRPC version)'
+  'the selected attester does not support required Init-Data binding'
+  'kata-agent.service: Main process exited, code=exited, status=1/FAILURE'
+  'Powering off: unit kata-agent.service failed'
 )
 for marker in "${required_markers[@]}"; do
-  grep -Fq "$marker" "$clean_log" || die "guest boot lacks required marker: $marker"
+  grep -Fq "$marker" "$clean_log" \
+    || fail_with_logs "guest boot lacks required marker: $marker"
 done
 if grep -Fq 'Failed to start kata-extension-mount@coco' "$clean_log"; then
-  die "CoCo extension mount failed"
+  fail_with_logs "CoCo extension mount failed"
 fi
 
-printf 'Kata TCG boot smoke passed: dm-verity root, CoCo extension, and Kata Agent ready\n'
-printf 'note: this proves guest boot integrity, not SEV-SNP attestation\n'
+printf 'Kata TCG boot smoke passed: dm-verity root, CoCo extension, Kata Agent launch, and required Init-Data fail-closed path\n'
+printf 'note: this proves boot integrity and non-TEE rejection, not SEV-SNP authorization\n'

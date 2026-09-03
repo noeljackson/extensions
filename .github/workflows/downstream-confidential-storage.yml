@@ -52,6 +52,7 @@ jobs:
             hack/codewire-confidential-storage/build.sh \
             hack/codewire-confidential-storage/publish.sh \
             hack/codewire-confidential-storage/qemu-tcg-boot-smoke \
+            hack/codewire-confidential-storage/test-qemu-tcg-boot-smoke.sh \
             hack/codewire-confidential-storage/test-publication-contract.sh
 
   publish:

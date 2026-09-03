@@ -163,12 +163,16 @@ CODEWIRE_CONFIDENTIAL_STORAGE_SCRATCH_ROOT="$PWD/_out/scratch" \
 ```
 
 The smoke parses both measured-disk bindings from the final runtime-rs config,
-boots the packaged kernel with the packaged confidential root and CoCo extension
-disks, and requires dm-verity root activation, the extension mount, and Kata
-Agent readiness. It retains its private full log directory on failure and emits
-only fixed structural claims on success. This is a fast guest-boot contract
-test; it does not emulate `/dev/sev`, produce an SNP report, or replace live SNP
-attestation and storage acceptance.
+resolves the packaged kernel symlink inside the immutable payload, and boots
+that kernel with the packaged confidential root and CoCo extension disks. It
+also supplies a canonical minimal Init-Data block. The gate requires dm-verity
+root activation, the extension mount, Kata Agent and Attestation Agent launch,
+and the clean fail-closed shutdown produced when the TCG sample attester cannot
+bind required Init-Data. It retains a bounded QEMU and serial-log directory on
+failure and emits only fixed structural claims on success. This is a fast
+guest-boot and non-TEE rejection contract test; it does not emulate `/dev/sev`,
+produce an SNP report, authorize a workload, or replace live SNP attestation
+and storage acceptance.
 
 The source lock also binds the final QEMU-SNP guest-side `overhead_memory` to
 2048 MiB. The downstream packaging overlay applies this deployment value

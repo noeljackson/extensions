@@ -86,6 +86,7 @@ BUILDER_INPUT_FILES = {
     "hack/codewire-confidential-storage/publish.sh",
     "hack/codewire-confidential-storage/qemu-tcg-boot-smoke",
     "hack/codewire-confidential-storage/test-publication-contract.sh",
+    "hack/codewire-confidential-storage/test-qemu-tcg-boot-smoke.sh",
 }
 TALOS_EXTENSION_NAMES = ["iscsi-tools", "util-linux-tools"]
 FULL_HASH = re.compile(r"^[0-9a-f]{40}$")
