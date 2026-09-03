@@ -6,11 +6,13 @@ dependencies:
   - stage: fuse3
     from: /rootfs/
     to: /rootfs/
+  # {{ if eq .ARCH "x86_64" }} AMD SEV-SNP payloads are x86_64-only
   - stage: glibc
     from: /rootfs/
     to: /rootfs/usr/local/lib/containers/nydus-for-kata-tee/
-  - image: ghcr.io/noeljackson/kata-deploy-codewire@sha256:a02db0ba8179347258c7e601f3f7366cd55fa2e6bff9f5f90e67905ba5aacaf7
+  - image: quay.io/kata-containers/kata-deploy@sha256:e677a892072610f948b192d5bedb7fbcc62c894315c22bf703af484c49bd8776
     from: /opt/kata-artifacts/nydus-snapshotter
+  # {{ end }} This in fact is YAML comment, but Go templating instruction is evaluated by bldr
 steps:
   - sources:
     # {{ if eq .ARCH "aarch64" }} This in fact is YAML comment, but Go templating instruction is evaluated by bldr
@@ -46,7 +48,9 @@ steps:
 
         install -m 0755 ../cloud-hypervisor-static /rootfs/usr/local/bin/cloud-hypervisor
         install -m 0755 ./opt/kata/runtime-rs/bin/containerd-shim-kata-v2 /rootfs/usr/local/bin/containerd-shim-kata-v2
+        # {{ if eq .ARCH "x86_64" }} AMD SEV-SNP payloads are x86_64-only
         ln -s containerd-shim-kata-v2 /rootfs/usr/local/bin/containerd-shim-kata-qemu-snp-v2
+        # {{ end }} This in fact is a shell comment, but Go templating instruction is evaluated by bldr
         cp ./opt/kata/libexec/virtiofsd /rootfs/usr/local/libexec/
 
         cp ./opt/kata/share/kata-containers/kata-containers.img /rootfs/usr/local/share/kata-containers/kata-containers.img
@@ -54,8 +58,9 @@ steps:
         cp ./opt/kata/share/defaults/kata-containers/runtime-rs/configuration-clh-runtime-rs.toml \
           /rootfs/usr/local/share/kata-containers/configuration.toml
 
-        # Codewire confidential proof parity: install the QEMU-SNP payload
-        # and nydus-for-Kata-TEE snapshotter under the Talos extension
+        # {{ if eq .ARCH "x86_64" }} AMD SEV-SNP payloads are x86_64-only
+        # Install the QEMU-SNP payload and nydus-for-Kata-TEE snapshotter under
+        # the Talos extension
         # /usr/local layout. Talos does not ship /bin/sh, so the Kata config
         # must point at a static wrapper that execs the real QEMU binary with
         # its data directory.
@@ -94,6 +99,7 @@ steps:
           exit 1
         fi
         cp "${vmlinuz_candidates[0]}" /rootfs/usr/local/share/kata-containers/
+        # {{ end }} This in fact is a shell comment, but Go templating instruction is evaluated by bldr
 
         sed -i \
           -e 's#/opt/kata#/usr/local#g' \
@@ -102,6 +108,7 @@ steps:
           || sed -i '/^enable_annotations = / s/]$/, "cc_init_data"]/' \
             /rootfs/usr/local/share/kata-containers/configuration.toml
 
+        # {{ if eq .ARCH "x86_64" }} AMD SEV-SNP payloads are x86_64-only
         sed -i \
           -e 's#/opt/kata#/usr/local#g' \
           -e 's#path = "/usr/local/bin/qemu-system-x86_64"#path = "/usr/local/bin/qemu-system-x86_64-snp-experimental"#' \
@@ -112,21 +119,26 @@ steps:
         grep -Eq '^enable_annotations = .*"cc_init_data"' /rootfs/usr/local/share/kata-containers/configuration-qemu-snp.toml \
           || sed -i '/^enable_annotations = / s/]$/, "cc_init_data"]/' \
             /rootfs/usr/local/share/kata-containers/configuration-qemu-snp.toml
+        # {{ end }} This in fact is a shell comment, but Go templating instruction is evaluated by bldr
       - |
         mkdir -p /rootfs/etc/cri/conf.d
         cp /pkg/10-kata-containers.part /rootfs/etc/cri/conf.d/10-kata-containers.part
 
+        # {{ if eq .ARCH "x86_64" }} AMD SEV-SNP payloads are x86_64-only
+        cat /pkg/10-kata-containers-snp.part >> /rootfs/etc/cri/conf.d/10-kata-containers.part
         mkdir -p /rootfs/usr/local/etc/containers
         cp /pkg/nydus-for-kata-tee.yaml /rootfs/usr/local/etc/containers/nydus-for-kata-tee.yaml
+        # {{ end }} This in fact is a shell comment, but Go templating instruction is evaluated by bldr
 
     test:
       - |
-        # Codewire renders these two hypervisor annotations for both runtime
-        # profiles. Keep the package-level assertion close to the files that
-        # containerd loads, rather than relying on an unannotated Kata smoke.
-        for config in \
-          /rootfs/usr/local/share/kata-containers/configuration.toml \
-          /rootfs/usr/local/share/kata-containers/configuration-qemu-snp.toml; do
+        # Keep the annotation assertion close to the files that containerd
+        # loads, rather than relying on an unannotated Kata smoke.
+        configs=(/rootfs/usr/local/share/kata-containers/configuration.toml)
+        # {{ if eq .ARCH "x86_64" }} AMD SEV-SNP payloads are x86_64-only
+        configs+=(/rootfs/usr/local/share/kata-containers/configuration-qemu-snp.toml)
+        # {{ end }} This in fact is a shell comment, but Go templating instruction is evaluated by bldr
+        for config in "${configs[@]}"; do
           annotations="$(sed -nE 's/^enable_annotations = (.*)$/\1/p' "$config")"
           test -n "$annotations"
           printf '%s\n' "$annotations" | grep -Fq '"cc_init_data"'

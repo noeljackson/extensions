@@ -1,15 +1,7 @@
 # kata-containers extension
 
-The Codewire confidential-storage build does not use the upstream static
-release payload directly. The package source revision is pinned to the accepted
-Kata merge, while `hack/codewire-confidential-storage` builds the measured
-confidential guest from that exact source and the accepted guest-components
-merge, verifies its storage-tool closure, and overlays only the confidential
-payload plus runtime shim onto the accepted extension base.
-
-That source-owned recipe emits a local OCI archive, SPDX material SBOM, and
-SLSA/in-toto provenance. It has no publication path; publishing the exact image
-belongs to the separately authorized confidential-storage OP-1.
+This extension packages both the standard Cloud Hypervisor runtime and a
+confidential QEMU SEV-SNP runtime from the Kata Containers release payload.
 
 ## Installation
 
@@ -17,23 +9,23 @@ See [Installing Extensions](https://github.com/siderolabs/extensions#installing-
 
 ## Usage
 
-This fork exposes the Codewire runtime handler names used by the dev runtime
-profiles:
+The extension exposes these explicit runtime handlers:
 
 - `kata-clh` uses the Cloud Hypervisor configuration for commodity workloads.
-- `kata-qemu-snp` uses the QEMU-SNP configuration, the SNP experimental QEMU
-  binary, AMD SEV firmware, and the confidential guest image.
+- On x86_64, `kata-qemu-snp` uses the QEMU-SNP configuration, the SNP
+  experimental QEMU binary, AMD SEV firmware, and the confidential guest image.
 
-Both configurations retain the Codewire-required `cc_init_data` and
-`kernel_params` hypervisor annotations in addition to their upstream defaults.
-Codewire uses these standard Kata transports for Agent Policy and CoCo guest
-configuration; the package test rejects wildcard annotation patterns.
+The SEV-SNP handler and its nydus snapshotter are omitted from ARM64 builds;
+the standard Kata and `kata-clh` handlers remain available there.
+
+Both configurations retain the `cc_init_data` and `kernel_params` hypervisor
+annotations used for Agent Policy and confidential guest configuration. The
+package test rejects wildcard annotation patterns.
 
 The confidential handler also installs `nydus-for-kata-tee` and configures only
 `kata-qemu-snp` to use that snapshotter. Do not make nydus the global
-containerd snapshotter. `runc` stays on the Talos default snapshotter, and
-`kata-clh` is intended to move to devmapper/dm-thin once the host thin-pool is
-provisioned before containerd starts.
+containerd snapshotter. `runc` and `kata-clh` stay on the Talos default
+snapshotter.
 
 Talos does not ship `/bin/sh`, so the `mount.fuse` helper is a static wrapper
 that execs `nydus-overlayfs` directly instead of using libfuse's shell-based
