@@ -755,6 +755,7 @@ class MaterialTests(unittest.TestCase):
                 ),
                 "tools/packaging/kata-deploy/local-build/Makefile": "all:\n\ttrue\n",
                 "tools/packaging/kata-deploy/local-build/kata-deploy-binaries.sh": (
+                    'echo "${image}:${version}-${variant}"\n'
                     'digest="$(resolve_oci_artifact_manifest '
                     '"${disk_image_ref}" "${go_arch}")"\n'
                 ),
@@ -797,6 +798,18 @@ class MaterialTests(unittest.TestCase):
             self.assertIn(
                 'extension_image: "ghcr.io/noeljackson/guest-components/coco-extension-disk"',
                 (output / "versions.yaml").read_text(encoding="utf-8"),
+            )
+            packaging = (
+                output
+                / "tools/packaging/kata-deploy/local-build/kata-deploy-binaries.sh"
+            )
+            self.assertIn(
+                'echo "${image}:${version}-${variant}-$(get_coco_extension_oci_arch)"',
+                packaging.read_text(encoding="utf-8"),
+            )
+            self.assertNotIn(
+                'echo "${image}:${version}-${variant}"',
+                packaging.read_text(encoding="utf-8"),
             )
             self.assertIn(
                 'PACKAGES+=" cryptsetup-bin dmsetup e2fsprogs"',
@@ -847,8 +860,18 @@ class MaterialTests(unittest.TestCase):
                 encoding="utf-8",
             )
             with self.assertRaisesRegex(
-                materials.MaterialError,
-                "select the CoCo disk manifest explicitly",
+                materials.MaterialError, "architecture-qualified CoCo container tag"
+            ):
+                materials.verify_prepared_kata(lock, output)
+
+            packaging.write_text(
+                'echo "${image}:${version}-${variant}-$(get_coco_extension_oci_arch)"\n'
+                'digest="$(oras resolve --platform "linux/${go_arch}" '
+                '"${disk_image_ref}")"\n',
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(
+                materials.MaterialError, "select the CoCo disk manifest explicitly"
             ):
                 materials.verify_prepared_kata(lock, output)
 

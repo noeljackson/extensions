@@ -1287,12 +1287,19 @@ def prepare_kata(
     platform = lock["platforms"][0]
     verify_file_contract(output, contract["input_files"], "Kata build contract")
     guest = lock["sources"]["guest_components"]
+    packaging = output / "tools/packaging/kata-deploy/local-build/kata-deploy-binaries.sh"
     patches = [
         bind_yaml_asset_source(
             output / "versions.yaml",
             "coco-guest-components",
             guest_component_bindings(guest, guest_variant, platform),
             "bind the accepted guest-components source",
+        ),
+        replace_once(
+            packaging,
+            'echo "${image}:${version}-${variant}"',
+            'echo "${image}:${version}-${variant}-$(get_coco_extension_oci_arch)"',
+            "select the architecture-qualified guest-components container tag",
         ),
         replace_once(
             output / "tools/osbuilder/rootfs-builder/ubuntu/config.sh",
@@ -1356,6 +1363,18 @@ def verify_prepared_kata(lock: dict[str, Any], repo: Path) -> None:
     packaging = (
         repo / "tools/packaging/kata-deploy/local-build/kata-deploy-binaries.sh"
     ).read_text(encoding="utf-8")
+    container_reference = (
+        'echo "${image}:${version}-${variant}-$(get_coco_extension_oci_arch)"'
+    )
+    if packaging.count(container_reference) != 1:
+        raise MaterialError(
+            "prepared Kata source does not select the architecture-qualified "
+            "CoCo container tag"
+        )
+    if 'echo "${image}:${version}-${variant}"' in packaging:
+        raise MaterialError(
+            "prepared Kata source retains the unqualified CoCo container tag"
+        )
     resolver_call = (
         'digest="$(resolve_oci_artifact_manifest "${disk_image_ref}" "${go_arch}")"'
     )
