@@ -78,11 +78,14 @@ GUEST_IMAGE_ATTESTATION_PREDICATES = {
     "disk": {"provenance": "https://slsa.dev/provenance/v1"},
 }
 BUILDER_INPUT_FILES = {
+    ".github/workflows/downstream-confidential-storage.yml",
     "hack/codewire-confidential-storage/base-rootfs.Dockerfile",
     "hack/codewire-confidential-storage/build.sh",
     "hack/codewire-confidential-storage/extension.Dockerfile",
     "hack/codewire-confidential-storage/materials.py",
+    "hack/codewire-confidential-storage/publish.sh",
     "hack/codewire-confidential-storage/qemu-tcg-boot-smoke",
+    "hack/codewire-confidential-storage/test-publication-contract.sh",
 }
 TALOS_EXTENSION_NAMES = ["iscsi-tools", "util-linux-tools"]
 FULL_HASH = re.compile(r"^[0-9a-f]{40}$")

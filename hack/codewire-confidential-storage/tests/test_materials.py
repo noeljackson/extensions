@@ -1433,6 +1433,15 @@ metadata:
         self.assertNotIn("rootfs-image-mariner-tarball", recipe)
         self.assertNotIn("qemu-tdx-experimental-tarball", recipe)
 
+    def test_downstream_publication_contract_is_separate_and_guarded(self) -> None:
+        subprocess.run(
+            [SCRIPT_DIR / "test-publication-contract.sh"],
+            cwd=SCRIPT_DIR.parents[1],
+            check=True,
+            text=True,
+            stdout=subprocess.PIPE,
+        )
+
     def _init_repo(self, path: Path) -> None:
         path.mkdir()
         subprocess.run(["git", "init", "--quiet", path], check=True)

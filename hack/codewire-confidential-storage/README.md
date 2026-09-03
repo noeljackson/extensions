@@ -31,7 +31,9 @@ reproduction—form the immutable publication unit. Longhorn is intentionally
 absent from this build boundary: the cluster consumes the stock CSI deployment
 and this artifact supplies only the Kata guest/runtime contract above it.
 
-`build.sh` has no registry login or push path. It can:
+`build.sh` has no registry login or push path. The deployment branch keeps that
+source/build boundary separate from its checked-in GitHub Actions publication
+overlay. It can:
 
 - validate and download-check every source lock;
 - prepare exact Kata source with the accepted guest-components revision;
@@ -128,10 +130,28 @@ builder normalizes public source checkout modes independently of the invoking
 shell umask and rejects a libseccomp installer that the unprivileged builder UID
 cannot execute.
 
-The outputs are local OCI archives plus non-secret material receipts. Publishing
-them is OP-1 and requires its separate action-scoped authority. Never replace a
-failed exact build with an upstream static tarball, a branch/tag source, or a
-commodity/local-path fallback.
+The outputs are local OCI archives plus non-secret material receipts. Only
+`.github/workflows/downstream-confidential-storage.yml`, after an authorized
+push to the exact deployment branch, may pass one of those archives to
+`publish.sh`. Pull requests run the source-only and publication-contract gates;
+they never publish or perform the expensive Kata build. The accepted PR head is
+then built once by the deployment-branch push, booted under QEMU TCG, and copied
+with all of its embedded BuildKit SPDX/SLSA attestations to
+`ghcr.io/noeljackson/kata-containers`.
+
+The immutable tag is
+`<kata-version>-codewire-confidential-storage-<full-source-lock-sha256>`.
+`publish.sh` rejects any other repository, event, ref, checkout head, or dirty
+tracked checkout. It refuses to overwrite an existing tag with different
+content, accepts an exact digest as an idempotent retry, verifies the published
+index, platform, source labels, and matching embedded attestation descriptor,
+and emits a non-secret receipt. GitHub OIDC adds a registry provenance
+attestation for the exact deployment commit after the copy. There is no manual
+dispatch, release, moving tag, or local publication mode.
+
+Publication remains OP-1 and requires separate action-scoped authority for the
+deployment push. Never replace a failed exact build with an upstream static
+tarball, a branch/tag source, or a commodity/local-path fallback.
 
 Before publication, directly boot the exact final OCI payload under local QEMU
 TCG:
