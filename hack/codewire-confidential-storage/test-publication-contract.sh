@@ -31,6 +31,27 @@ require_text() {
 	}
 }
 
+require_count() {
+	local file=$1 value=$2 expected=$3 description=$4 actual
+	actual="$(grep -Fxc -- "${value}" "${file}" || true)"
+	[[ "${actual}" -eq "${expected}" ]] || {
+		printf 'expected %s %s in %s, found %s\n' \
+			"${expected}" "${description}" "${file}" "${actual}" >&2
+		return 1
+	}
+}
+
+require_order() {
+	local file=$1 first=$2 second=$3 description=$4 first_line second_line
+	first_line="$(grep -nF -- "${first}" "${file}" | head -n 1 | cut -d: -f1)"
+	second_line="$(grep -nF -- "${second}" "${file}" | head -n 1 | cut -d: -f1)"
+	[[ "${first_line}" =~ ^[0-9]+$ && "${second_line}" =~ ^[0-9]+$ && \
+		"${first_line}" -lt "${second_line}" ]] || {
+		printf 'workflow does not preserve %s\n' "${description}" >&2
+		return 1
+	}
+}
+
 verify_workflow() {
 	local candidate=$1
 	[[ "$(grep -Fxc '      - downstream/confidential-storage' "${candidate}")" -eq 2 ]] || {
@@ -49,54 +70,98 @@ verify_workflow() {
 		printf 'checkout must consume the exact event commit\n' >&2
 		return 1
 	}
-	require_line "${candidate}" \
+	require_count "${candidate}" \
 		'    if: github.event_name == '\''push'\'' && github.ref == '\''refs/heads/downstream/confidential-storage'\'' && github.repository == '\''noeljackson/extensions'\''' \
-		'exact publication job guard'
-	require_line "${candidate}" \
+		2 'exact build and publication job guards' || return 1
+	require_count "${candidate}" \
 		'        run: ./hack/codewire-confidential-storage/publish.sh preflight' \
-		'pre-build publication preflight'
+		2 'exact build and publication preflights' || return 1
 	require_text "${candidate}" \
 		'./hack/codewire-confidential-storage/qemu-tcg-boot-smoke' \
-		'exact archive boot gate'
+		'exact archive boot gate' || return 1
+	require_line "${candidate}" \
+		'    needs: build' \
+		'publication dependency on the verified build' || return 1
+	require_text "${candidate}" \
+		'name: confidential-storage-payload-${{ github.sha }}' \
+		'deployment-head-scoped publication payload' || return 1
+	require_count "${candidate}" \
+		'          name: confidential-storage-payload-${{ github.sha }}' \
+		2 'matching publication payload upload and download names' || return 1
+	require_count "${candidate}" \
+		'        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1' \
+		2 'pinned payload and receipt uploads' || return 1
+	require_text "${candidate}" \
+		'publication-payload.sha256' \
+		'exact payload digest manifest' || return 1
+	require_line "${candidate}" \
+		'            _out/confidential-storage/kata-extension/publication-payload.sha256' \
+		'durable payload digest receipt' || return 1
+	require_text "${candidate}" \
+		'find kata-extension.oci.tar kata-extension.metadata.json materials' \
+		'complete payload digest inputs' || return 1
+	require_line "${candidate}" \
+		'        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1' \
+		'pinned publication payload download' || return 1
+	require_line "${candidate}" \
+		'          path: ${{ env.OUTPUT_ROOT }}/kata-extension' \
+		'exact publication payload restore path' || return 1
+	require_line "${candidate}" \
+		'          compression-level: 0' \
+		'non-recompressing OCI payload preservation' || return 1
+	require_line "${candidate}" \
+		'          retention-days: 7' \
+		'bounded publication payload retention' || return 1
+	require_text "${candidate}" \
+		'sha256sum --check' \
+		'publication payload digest verification' || return 1
+	require_order "${candidate}" \
+		'./hack/codewire-confidential-storage/qemu-tcg-boot-smoke' \
+		'- name: Preserve the verified publication payload' \
+		'QEMU gate before payload preservation' || return 1
+	require_order "${candidate}" \
+		'sha256sum --check' \
+		'- name: Log in to GHCR for the immutable copy' \
+		'payload verification before registry authentication' || return 1
 	require_text "${candidate}" \
 		'./hack/codewire-confidential-storage/publish.sh publish' \
-		'separate publication wrapper'
-	require_line "${candidate}" \
+		'separate publication wrapper' || return 1
+	require_count "${candidate}" \
 		'      packages: write' \
-		'narrow registry permission'
-	require_line "${candidate}" \
+		1 'single publish-job registry permission' || return 1
+	require_count "${candidate}" \
 		'      id-token: write' \
-		'OIDC attestation permission'
-	require_line "${candidate}" \
+		1 'single publish-job OIDC attestation permission' || return 1
+	require_count "${candidate}" \
 		'      attestations: write' \
-		'GitHub attestation permission'
+		1 'single publish-job GitHub attestation permission' || return 1
 }
 
 verify_publisher() {
 	require_line "${publisher}" \
 		'registry_repository="ghcr.io/noeljackson/kata-containers"' \
-		'fixed destination repository'
+		'fixed destination repository' || return 1
 	require_text "${publisher}" \
 		'${kata_version}-codewire-confidential-storage-${lock_digest}' \
-		'full-lock immutable tag'
+		'full-lock immutable tag' || return 1
 	require_text "${publisher}" \
 		'[[ "${GITHUB_EVENT_NAME:-}" == "push" ]]' \
-		'push event guard'
+		'push event guard' || return 1
 	require_text "${publisher}" \
 		'[[ "${GITHUB_REF:-}" == "refs/heads/downstream/confidential-storage" ]]' \
-		'exact ref guard'
+		'exact ref guard' || return 1
 	require_text "${publisher}" \
 		'[[ "${GITHUB_REPOSITORY:-}" == "noeljackson/extensions" ]]' \
-		'exact repository guard'
+		'exact repository guard' || return 1
 	require_text "${publisher}" \
 		'[[ "$(git -C "${repo_root}" rev-parse HEAD)" == "${GITHUB_SHA}" ]]' \
-		'exact checkout guard'
+		'exact checkout guard' || return 1
 	require_text "${publisher}" \
 		'[[ "${existing_digest}" == "${source_digest}" ]]' \
-		'immutable collision guard'
+		'immutable collision guard' || return 1
 	require_text "${publisher}" \
 		'skopeo copy --all --format oci' \
-		'all-manifest copy'
+		'all-manifest copy' || return 1
 	! grep -Fq 'docker login' "${publisher}" || {
 		printf 'publisher must consume workflow-provided registry authentication\n' >&2
 		return 1
@@ -119,6 +184,21 @@ sed '/      - downstream\/confidential-storage$/a\      - downstream/confidentia
 	"${workflow}" >"${test_root}/candidate.yml"
 if verify_workflow "${test_root}/candidate.yml" >/dev/null 2>&1; then
 	printf 'source-branch publication fixture unexpectedly satisfied the contract\n' >&2
+	exit 1
+fi
+
+# Publication must remain downstream of the successful exact build/QEMU job.
+sed '/^    needs: build$/d' "${workflow}" >"${test_root}/candidate.yml"
+if verify_workflow "${test_root}/candidate.yml" >/dev/null 2>&1; then
+	printf 'publication without the exact build dependency unexpectedly satisfied the contract\n' >&2
+	exit 1
+fi
+
+# A downloaded artifact is not authority unless its archive digest is checked.
+sed 's/sha256sum --check/sha256sum --version/' \
+	"${workflow}" >"${test_root}/candidate.yml"
+if verify_workflow "${test_root}/candidate.yml" >/dev/null 2>&1; then
+	printf 'unverified publication payload unexpectedly satisfied the contract\n' >&2
 	exit 1
 fi
 

@@ -63,16 +63,16 @@
   },
   "builder": {
     "source": "extensions",
-    "input_tree_sha256": "892286f0613e70cb34636f653933117235946d38982a02638b3fa39f63521675",
+    "input_tree_sha256": "9454d736b6c441fb1eda2352111ff2b2f3744acb5dc54cb3e8450e20c733872b",
     "input_files": {
-      ".github/workflows/downstream-confidential-storage.yml": "189674c61c39c0ddf7700e6d98027069fc8df737c1b148c93de3e04d4d8d4dfa",
+      ".github/workflows/downstream-confidential-storage.yml": "48d573bc77accd824443d06a562a2b2c37c6de73120812fa7307541ede3d2561",
       "hack/codewire-confidential-storage/base-rootfs.Dockerfile": "b5d07e12cbee83b0992cca3f2e8dee28bac8655cc96bbc1bb989adcadb70f04e",
       "hack/codewire-confidential-storage/build.sh": "188ef63520d310e6d0742b76e8c33fe4221c1856b6d151bf01d25f9bdc2e7eb0",
       "hack/codewire-confidential-storage/extension.Dockerfile": "bf4076833de8e2e4e71e7f6030995962ba30c95acb1dd4de5c7f02ac5616bc35",
       "hack/codewire-confidential-storage/materials.py": "fa8a04a45c288b94c1387b228ee13ba951fcf88721751c08305afd46f509dbe6",
       "hack/codewire-confidential-storage/publish.sh": "d0849a2d6d05193652e09a5570c53642e02b011e03680ed0a95b152a0f81b966",
       "hack/codewire-confidential-storage/qemu-tcg-boot-smoke": "1576ea04e2e61ba4915be027e6e0e8a11605ef7e7b624c2bd664b378dcca937d",
-      "hack/codewire-confidential-storage/test-publication-contract.sh": "69e85fc2cfab27a1a09f7b66a5515fa26bfe09301774a7b3f22f54077e8cc7ff",
+      "hack/codewire-confidential-storage/test-publication-contract.sh": "85321a0e82784b8b0a9576bf67eb3ec1cd34528ba203f2131130207a5b89d7ce",
       "hack/codewire-confidential-storage/test-qemu-tcg-boot-smoke.sh": "54cf24fb487e32bb44546d204c00570736a06fa89d82ad4b8c4c7ca748c82521"
     }
   },
