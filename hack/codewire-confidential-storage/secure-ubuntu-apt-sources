@@ -16,6 +16,8 @@ apt_dir="${root}/etc/apt"
 [[ -d "${apt_dir}" ]] || die "apt configuration directory is missing: ${apt_dir}"
 
 declare -a source_files=()
+[[ -f "${apt_dir}/apt-mirrors.txt" ]] \
+	&& source_files+=("${apt_dir}/apt-mirrors.txt")
 [[ -f "${apt_dir}/sources.list" ]] && source_files+=("${apt_dir}/sources.list")
 if [[ -d "${apt_dir}/sources.list.d" ]]; then
 	while IFS= read -r -d '' source_file; do

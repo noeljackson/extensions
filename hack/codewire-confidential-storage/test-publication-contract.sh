@@ -179,22 +179,27 @@ verify_publisher
 
 mkdir -p "${test_root}/apt-root/etc/apt/sources.list.d"
 cat >"${test_root}/apt-root/etc/apt/sources.list" <<'EOF'
-deb http://azure.archive.ubuntu.com/ubuntu resolute main
+deb http://ports.ubuntu.com/ubuntu-ports resolute main
 deb http://example.invalid/ubuntu resolute main
+EOF
+cat >"${test_root}/apt-root/etc/apt/apt-mirrors.txt" <<'EOF'
+http://azure.archive.ubuntu.com/ubuntu/	priority:1
+https://archive.ubuntu.com/ubuntu/	priority:2
+https://security.ubuntu.com/ubuntu/	priority:3
 EOF
 cat >"${test_root}/apt-root/etc/apt/sources.list.d/ubuntu.sources" <<'EOF'
 Types: deb
-URIs: http://archive.ubuntu.com/ubuntu http://security.ubuntu.com/ubuntu
+URIs: mirror+file:/etc/apt/apt-mirrors.txt
 Suites: resolute resolute-updates resolute-security
 Components: main
 EOF
 "${apt_source_guard}" "${test_root}/apt-root"
-require_text "${test_root}/apt-root/etc/apt/sources.list" \
+require_text "${test_root}/apt-root/etc/apt/apt-mirrors.txt" \
 	'https://azure.archive.ubuntu.com/ubuntu' \
 	'regional Ubuntu HTTPS source' || exit 1
-require_text "${test_root}/apt-root/etc/apt/sources.list.d/ubuntu.sources" \
-	'https://archive.ubuntu.com/ubuntu https://security.ubuntu.com/ubuntu' \
-	'official Ubuntu HTTPS sources' || exit 1
+require_text "${test_root}/apt-root/etc/apt/sources.list" \
+	'https://ports.ubuntu.com/ubuntu-ports' \
+	'Ubuntu ports HTTPS source' || exit 1
 require_text "${test_root}/apt-root/etc/apt/sources.list" \
 	'http://example.invalid/ubuntu' \
 	'untouched non-Ubuntu source' || exit 1
