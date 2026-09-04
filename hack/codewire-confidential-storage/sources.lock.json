@@ -63,13 +63,13 @@
   },
   "builder": {
     "source": "extensions",
-    "input_tree_sha256": "77e7827f9fb9ea6d27aa46d9e5bae6c5d3f03ed83682e6638769cfe96c2f4983",
+    "input_tree_sha256": "d5f2836856e98d10e1fca8ddb1545e1c7a52deb4c9a78b313ec309e0e09c67e2",
     "input_files": {
       ".github/workflows/downstream-confidential-storage.yml": "1a552d04dbbf9a6284a551f5191d5e54fcfda50cab59cd8350caca53bd4fd7f5",
       "hack/codewire-confidential-storage/base-rootfs.Dockerfile": "b5d07e12cbee83b0992cca3f2e8dee28bac8655cc96bbc1bb989adcadb70f04e",
       "hack/codewire-confidential-storage/build.sh": "188ef63520d310e6d0742b76e8c33fe4221c1856b6d151bf01d25f9bdc2e7eb0",
       "hack/codewire-confidential-storage/extension.Dockerfile": "bf4076833de8e2e4e71e7f6030995962ba30c95acb1dd4de5c7f02ac5616bc35",
-      "hack/codewire-confidential-storage/materials.py": "9ecd4ef2b3a3f8bf2aa19472ec0202f8ef21d9690b4b624b990b49e84adec076",
+      "hack/codewire-confidential-storage/materials.py": "c773dd593cca178017b9e14899dd9714b1d0bc060910773e50d1e7e873b6b5c3",
       "hack/codewire-confidential-storage/publish.sh": "d0849a2d6d05193652e09a5570c53642e02b011e03680ed0a95b152a0f81b966",
       "hack/codewire-confidential-storage/qemu-tcg-boot-smoke": "1576ea04e2e61ba4915be027e6e0e8a11605ef7e7b624c2bd664b378dcca937d",
       "hack/codewire-confidential-storage/secure-ubuntu-apt-sources": "9169908ff5fecaf3feb4b5d535ca798a4aca166ced2994dd38b029e8dd47d085",
@@ -79,7 +79,8 @@
   },
   "base_images": {
     "buildkit_sbom_scanner": "docker.io/docker/buildkit-syft-scanner@sha256:79e7b013cbec16bbb436f312819a49a4a57752b2270c1a9332ae1a10fcc82a68",
-    "kata_talos_extension": "ghcr.io/noeljackson/kata-containers@sha256:fe31430b386e55bed7bc88464ae3095f1e9ea467a99305db4f4e4cca4acf1d69"
+    "kata_talos_extension": "ghcr.io/noeljackson/kata-containers@sha256:fe31430b386e55bed7bc88464ae3095f1e9ea467a99305db4f4e4cca4acf1d69",
+    "ubuntu_apt_ca_bootstrap": "docker.io/library/golang:1.26.7-alpine3.23@sha256:b17af760035fc2f338eed92d448a6c67f2d45438844fc6c60678fa5f99e44b57"
   },
   "guest_components_images": {
     "container": {

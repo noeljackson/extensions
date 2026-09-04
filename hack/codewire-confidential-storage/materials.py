@@ -440,6 +440,7 @@ def validate_lock(lock: dict[str, Any]) -> None:
         {
             "buildkit_sbom_scanner",
             "kata_talos_extension",
+            "ubuntu_apt_ca_bootstrap",
         },
         "base_images",
     )
@@ -453,6 +454,13 @@ def validate_lock(lock: dict[str, Any]) -> None:
         base_images["kata_talos_extension"],
     ):
         raise MaterialError("Kata Talos base image must be its exact GHCR digest")
+    if not re.fullmatch(
+        r"docker\.io/library/golang:1\.26\.7-alpine3\.23@sha256:[0-9a-f]{64}",
+        base_images["ubuntu_apt_ca_bootstrap"],
+    ):
+        raise MaterialError(
+            "Ubuntu APT CA bootstrap must be its exact Docker Hub digest"
+        )
     guest_images = lock["guest_components_images"]
     if not isinstance(guest_images, dict) or set(guest_images) != GUEST_IMAGE_NAMES:
         raise MaterialError(
@@ -1289,6 +1297,7 @@ def prepare_kata(
     platform = lock["platforms"][0]
     verify_file_contract(output, contract["input_files"], "Kata build contract")
     guest = lock["sources"]["guest_components"]
+    ca_bootstrap = lock["base_images"]["ubuntu_apt_ca_bootstrap"]
     packaging = output / "tools/packaging/kata-deploy/local-build/kata-deploy-binaries.sh"
     patches = [
         bind_yaml_asset_source(
@@ -1323,17 +1332,42 @@ def prepare_kata(
         ),
         replace_once(
             output / "tools/osbuilder/rootfs-builder/ubuntu/Dockerfile.in",
+            "ARG IMAGE_REGISTRY=docker.io\n"
+            "FROM ${IMAGE_REGISTRY}/ubuntu:@OS_VERSION@\n"
+            "@SET_PROXY@\n",
+            "ARG IMAGE_REGISTRY=docker.io\n"
+            f"FROM {ca_bootstrap} AS codewire-ubuntu-apt-ca\n"
+            "FROM ${IMAGE_REGISTRY}/ubuntu:@OS_VERSION@\n"
+            "@SET_PROXY@\n"
+            "COPY --from=codewire-ubuntu-apt-ca "
+            "/etc/ssl/certs/ca-certificates.crt "
+            "/etc/ssl/certs/ca-certificates.crt\n",
+            "seed Ubuntu APT trust from the locked CA bootstrap image",
+        ),
+        replace_once(
+            output / "tools/osbuilder/rootfs-builder/ubuntu/Dockerfile.in",
             "# hadolint ignore=DL3009,SC2046\nRUN apt-get update && \\\n",
             "# hadolint ignore=DL3009,SC2046\n"
-            "RUN source_file=/etc/apt/sources.list.d/ubuntu.sources && \\\n"
+            "RUN ca_bundle=/etc/ssl/certs/ca-certificates.crt && \\\n"
+            "    source_file=/etc/apt/sources.list.d/ubuntu.sources && \\\n"
+            "    test -s \"${ca_bundle}\" && \\\n"
             "    test -f \"${source_file}\" && \\\n"
             "    sed -E -i \\\n"
             "        -e 's#http://(([[:alnum:]-]+\\.)*archive[.]ubuntu[.]com|security[.]ubuntu[.]com|ports[.]ubuntu[.]com)(/|[[:space:]]|$)#https://\\1\\3#g' \\\n"
             "        \"${source_file}\" && \\\n"
             "    ! grep -Eq 'http://(([[:alnum:]-]+\\.)*archive[.]ubuntu[.]com|security[.]ubuntu[.]com|ports[.]ubuntu[.]com)(/|[[:space:]]|$)' \"${source_file}\" && \\\n"
             "    grep -Eq 'https://(([[:alnum:]-]+\\.)*archive[.]ubuntu[.]com|security[.]ubuntu[.]com|ports[.]ubuntu[.]com)(/|[[:space:]]|$)' \"${source_file}\" && \\\n"
-            "    apt-get update && \\\n",
+            "    apt-get -o Acquire::https::CaInfo=\"${ca_bundle}\" update && \\\n",
             "require HTTPS for the Ubuntu rootfs builder package sources",
+        ),
+        replace_once(
+            output / "tools/osbuilder/rootfs-builder/ubuntu/Dockerfile.in",
+            "    DEBIAN_FRONTEND=noninteractive \\\n"
+            "    apt-get --no-install-recommends -y install \\\n",
+            "    DEBIAN_FRONTEND=noninteractive \\\n"
+            "    apt-get -o Acquire::https::CaInfo=\"${ca_bundle}\" "
+            "--no-install-recommends -y install \\\n",
+            "keep pinned CA trust through the initial Ubuntu package download",
         ),
     ]
     verify_prepared_kata(lock, output)
@@ -1390,6 +1424,64 @@ def verify_prepared_kata(lock: dict[str, Any], repo: Path) -> None:
     dockerfile = (
         repo / "tools/osbuilder/rootfs-builder/ubuntu/Dockerfile.in"
     ).read_text(encoding="utf-8")
+    ca_reference = lock["base_images"]["ubuntu_apt_ca_bootstrap"]
+    ca_stage = f"FROM {ca_reference} AS codewire-ubuntu-apt-ca"
+    ca_copy = (
+        "COPY --from=codewire-ubuntu-apt-ca "
+        "/etc/ssl/certs/ca-certificates.crt "
+        "/etc/ssl/certs/ca-certificates.crt"
+    )
+    if dockerfile.count(ca_stage) != 1:
+        raise MaterialError(
+            "prepared Kata rootfs builder lacks the pinned CA bootstrap stage"
+        )
+    certificate_imports = [
+        line.strip()
+        for line in dockerfile.splitlines()
+        if line.lstrip().startswith(("COPY ", "ADD "))
+        and "ca-certificates.crt" in line
+    ]
+    if certificate_imports != [ca_copy]:
+        raise MaterialError(
+            "prepared Kata rootfs builder lacks the exact pinned CA bundle import"
+        )
+    target_stage = "FROM ${IMAGE_REGISTRY}/ubuntu:@OS_VERSION@"
+    source_gate = "source_file=/etc/apt/sources.list.d/ubuntu.sources"
+    ca_assignment = "ca_bundle=/etc/ssl/certs/ca-certificates.crt"
+    if (
+        dockerfile.count(target_stage) != 1
+        or dockerfile.count(ca_assignment) != 1
+        or dockerfile.count('test -s "${ca_bundle}"') != 1
+        or dockerfile.find(ca_stage) > dockerfile.find(target_stage)
+        or dockerfile.find(target_stage) > dockerfile.find(ca_copy)
+        or dockerfile.find(ca_copy) > dockerfile.find(ca_assignment)
+        or dockerfile.find(ca_assignment) > dockerfile.find(source_gate)
+    ):
+        raise MaterialError(
+            "prepared Kata rootfs builder does not establish CA trust before HTTPS"
+        )
+    ca_info = 'Acquire::https::CaInfo="${ca_bundle}"'
+    if (
+        dockerfile.count(ca_info) != 2
+        or dockerfile.count(f"apt-get -o {ca_info} update") != 1
+        or dockerfile.count(
+            f"apt-get -o {ca_info} --no-install-recommends -y install"
+        )
+        != 1
+    ):
+        raise MaterialError(
+            "prepared Kata rootfs builder does not use the pinned CA bundle "
+            "for every bootstrap APT transaction"
+        )
+    tls_bypasses = (
+        r"Acquire::https::Verify-(?:Peer|Host)[^\n]*(?:false|0)",
+        r"(?:curl|wget)[^\n]*(?:--insecure|--no-check-certificate|(?:^|\s)-k(?:\s|$))",
+        r"GIT_SSL_NO_VERIFY",
+    )
+    if any(re.search(pattern, dockerfile, re.IGNORECASE) for pattern in tls_bypasses):
+        raise MaterialError(
+            "prepared Kata rootfs builder contains a TLS verification bypass"
+        )
     if ubuntu_http.search(dockerfile):
         raise MaterialError(
             "prepared Kata rootfs builder retains a cleartext Ubuntu source"

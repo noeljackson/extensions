@@ -123,6 +123,13 @@ class MaterialTests(unittest.TestCase):
         with self.assertRaisesRegex(materials.MaterialError, "tree digest"):
             materials.validate_lock(changed)
 
+        changed = copy.deepcopy(self.lock)
+        changed["base_images"]["ubuntu_apt_ca_bootstrap"] = (
+            "docker.io/library/golang:1.26.7-alpine3.23"
+        )
+        with self.assertRaisesRegex(materials.MaterialError, "exact Docker Hub digest"):
+            materials.validate_lock(changed)
+
     def test_archive_url_must_resolve_exact_revision(self) -> None:
         changed = copy.deepcopy(self.lock)
         changed["sources"]["guest_components"]["archive"]["url"] = (
@@ -751,10 +758,14 @@ class MaterialTests(unittest.TestCase):
                     'REPO_URL=${REPO_URL:-http://ports.ubuntu.com}\n'
                 ),
                 "tools/osbuilder/rootfs-builder/ubuntu/Dockerfile.in": (
-                    "FROM ubuntu:resolute\n"
+                    "ARG IMAGE_REGISTRY=docker.io\n"
+                    "FROM ${IMAGE_REGISTRY}/ubuntu:@OS_VERSION@\n"
+                    "@SET_PROXY@\n"
                     "# hadolint ignore=DL3009,SC2046\n"
                     "RUN apt-get update && \\\n"
-                    "    apt-get install -y ca-certificates\n"
+                    "    DEBIAN_FRONTEND=noninteractive \\\n"
+                    "    apt-get --no-install-recommends -y install \\\n"
+                    "    ca-certificates\n"
                 ),
                 "tools/osbuilder/rootfs-builder/rootfs.sh": (
                     'dns_file="${ROOTFS_DIR}/etc/resolv.conf"\n: > "${dns_file}"\n'
@@ -836,14 +847,73 @@ class MaterialTests(unittest.TestCase):
             dockerfile = (
                 output / "tools/osbuilder/rootfs-builder/ubuntu/Dockerfile.in"
             )
+            ca_reference = self.lock["base_images"]["ubuntu_apt_ca_bootstrap"]
+            ca_stage = f"FROM {ca_reference} AS codewire-ubuntu-apt-ca"
+            ca_copy = (
+                "COPY --from=codewire-ubuntu-apt-ca "
+                "/etc/ssl/certs/ca-certificates.crt "
+                "/etc/ssl/certs/ca-certificates.crt"
+            )
+            prepared_dockerfile = dockerfile.read_text(encoding="utf-8")
+            self.assertEqual(prepared_dockerfile.count(ca_stage), 1)
+            self.assertEqual(prepared_dockerfile.count(ca_copy), 1)
+            self.assertEqual(
+                prepared_dockerfile.count(
+                    'Acquire::https::CaInfo="${ca_bundle}"'
+                ),
+                2,
+            )
+            self.assertLess(
+                prepared_dockerfile.index(ca_copy),
+                prepared_dockerfile.index(
+                    "source_file=/etc/apt/sources.list.d/ubuntu.sources"
+                ),
+            )
             self.assertIn(
                 "source_file=/etc/apt/sources.list.d/ubuntu.sources",
-                dockerfile.read_text(encoding="utf-8"),
+                prepared_dockerfile,
             )
             self.assertNotIn(
                 "RUN apt-get update",
-                dockerfile.read_text(encoding="utf-8"),
+                prepared_dockerfile,
             )
+            dockerfile.write_text(
+                prepared_dockerfile.replace(
+                    ca_stage,
+                    "FROM docker.io/library/golang:1.26.7-alpine3.23 "
+                    "AS codewire-ubuntu-apt-ca",
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(
+                materials.MaterialError, "pinned CA bootstrap stage"
+            ):
+                materials.verify_prepared_kata(lock, output)
+            dockerfile.write_text(
+                prepared_dockerfile.replace(
+                    ca_copy,
+                    "COPY ca-certificates.crt "
+                    "/etc/ssl/certs/ca-certificates.crt",
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(
+                materials.MaterialError, "exact pinned CA bundle import"
+            ):
+                materials.verify_prepared_kata(lock, output)
+            dockerfile.write_text(
+                prepared_dockerfile.replace(
+                    "source_file=/etc/apt/sources.list.d/ubuntu.sources",
+                    "apt_option='Acquire::https::Verify-Peer=false' && \\\n"
+                    "    source_file=/etc/apt/sources.list.d/ubuntu.sources",
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(
+                materials.MaterialError, "TLS verification bypass"
+            ):
+                materials.verify_prepared_kata(lock, output)
+            dockerfile.write_text(prepared_dockerfile, encoding="utf-8")
             dockerfile.write_text(
                 dockerfile.read_text(encoding="utf-8")
                 + "# http://security.ubuntu.com/ubuntu\n",
