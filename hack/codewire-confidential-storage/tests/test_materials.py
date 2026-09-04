@@ -745,7 +745,16 @@ class MaterialTests(unittest.TestCase):
                     '    extension_image: "ghcr.io/confidential-containers/guest-components/coco-extension-disk"\n'
                 ),
                 "tools/osbuilder/rootfs-builder/ubuntu/config.sh": (
-                    'PACKAGES="base"\nPACKAGES+=" cryptsetup-bin e2fsprogs"\n'
+                    'PACKAGES="base"\n'
+                    'PACKAGES+=" cryptsetup-bin e2fsprogs"\n'
+                    'REPO_URL=${REPO_URL:-http://archive.ubuntu.com/ubuntu}\n'
+                    'REPO_URL=${REPO_URL:-http://ports.ubuntu.com}\n'
+                ),
+                "tools/osbuilder/rootfs-builder/ubuntu/Dockerfile.in": (
+                    "FROM ubuntu:resolute\n"
+                    "# hadolint ignore=DL3009,SC2046\n"
+                    "RUN apt-get update && \\\n"
+                    "    apt-get install -y ca-certificates\n"
                 ),
                 "tools/osbuilder/rootfs-builder/rootfs.sh": (
                     'dns_file="${ROOTFS_DIR}/etc/resolv.conf"\n: > "${dns_file}"\n'
@@ -817,6 +826,53 @@ class MaterialTests(unittest.TestCase):
                     encoding="utf-8"
                 ),
             )
+            config = (
+                output / "tools/osbuilder/rootfs-builder/ubuntu/config.sh"
+            ).read_text(encoding="utf-8")
+            self.assertIn("https://archive.ubuntu.com/ubuntu", config)
+            self.assertIn("https://ports.ubuntu.com", config)
+            self.assertNotIn("http://archive.ubuntu.com", config)
+            self.assertNotIn("http://ports.ubuntu.com", config)
+            dockerfile = (
+                output / "tools/osbuilder/rootfs-builder/ubuntu/Dockerfile.in"
+            )
+            self.assertIn(
+                "source_file=/etc/apt/sources.list.d/ubuntu.sources",
+                dockerfile.read_text(encoding="utf-8"),
+            )
+            self.assertNotIn(
+                "RUN apt-get update",
+                dockerfile.read_text(encoding="utf-8"),
+            )
+            dockerfile.write_text(
+                dockerfile.read_text(encoding="utf-8")
+                + "# http://security.ubuntu.com/ubuntu\n",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(
+                materials.MaterialError, "builder retains a cleartext Ubuntu source"
+            ):
+                materials.verify_prepared_kata(lock, output)
+            dockerfile.write_text(
+                dockerfile.read_text(encoding="utf-8").replace(
+                    "# http://security.ubuntu.com/ubuntu\n", ""
+                ),
+                encoding="utf-8",
+            )
+            config_path = output / "tools/osbuilder/rootfs-builder/ubuntu/config.sh"
+            config_path.write_text(
+                config_path.read_text(encoding="utf-8").replace(
+                    "https://archive.ubuntu.com/ubuntu",
+                    "http://archive.ubuntu.com/ubuntu",
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(
+                materials.MaterialError,
+                "configuration retains a cleartext Ubuntu source",
+            ):
+                materials.verify_prepared_kata(lock, output)
+            config_path.write_text(config, encoding="utf-8")
             rootfs_builder = output / "tools/osbuilder/rootfs-builder/rootfs.sh"
             rootfs_builder.write_text(
                 'dns_file="${ROOTFS_DIR}/etc/resolv.conf"\ntouch "${dns_file}"\n',

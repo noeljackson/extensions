@@ -7,10 +7,12 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "${script_dir}/../.." && pwd)"
 workflow="${repo_root}/.github/workflows/downstream-confidential-storage.yml"
 publisher="${script_dir}/publish.sh"
+apt_source_guard="${script_dir}/secure-ubuntu-apt-sources"
 test_root="$(mktemp -d)"
 
 cleanup() {
 	rm -f -- "${test_root}/candidate.yml" "${test_root}/guard.stderr"
+	rm -rf -- "${test_root}/apt-root" "${test_root}/nonubuntu-root"
 	rmdir -- "${test_root}" 2>/dev/null || true
 }
 trap cleanup EXIT
@@ -76,6 +78,9 @@ verify_workflow() {
 	require_count "${candidate}" \
 		'        run: ./hack/codewire-confidential-storage/publish.sh preflight' \
 		2 'exact build and publication preflights' || return 1
+	require_count "${candidate}" \
+		'          sudo ./hack/codewire-confidential-storage/secure-ubuntu-apt-sources /' \
+		3 'Ubuntu apt HTTPS source gates' || return 1
 	require_text "${candidate}" \
 		'./hack/codewire-confidential-storage/qemu-tcg-boot-smoke' \
 		'exact archive boot gate' || return 1
@@ -172,10 +177,53 @@ verify_workflow "${workflow}"
 verify_publisher
 "${script_dir}/test-qemu-tcg-boot-smoke.sh"
 
+mkdir -p "${test_root}/apt-root/etc/apt/sources.list.d"
+cat >"${test_root}/apt-root/etc/apt/sources.list" <<'EOF'
+deb http://azure.archive.ubuntu.com/ubuntu resolute main
+deb http://example.invalid/ubuntu resolute main
+EOF
+cat >"${test_root}/apt-root/etc/apt/sources.list.d/ubuntu.sources" <<'EOF'
+Types: deb
+URIs: http://archive.ubuntu.com/ubuntu http://security.ubuntu.com/ubuntu
+Suites: resolute resolute-updates resolute-security
+Components: main
+EOF
+"${apt_source_guard}" "${test_root}/apt-root"
+require_text "${test_root}/apt-root/etc/apt/sources.list" \
+	'https://azure.archive.ubuntu.com/ubuntu' \
+	'regional Ubuntu HTTPS source' || exit 1
+require_text "${test_root}/apt-root/etc/apt/sources.list.d/ubuntu.sources" \
+	'https://archive.ubuntu.com/ubuntu https://security.ubuntu.com/ubuntu' \
+	'official Ubuntu HTTPS sources' || exit 1
+require_text "${test_root}/apt-root/etc/apt/sources.list" \
+	'http://example.invalid/ubuntu' \
+	'untouched non-Ubuntu source' || exit 1
+if grep -ERq \
+	'http://(([[:alnum:]-]+\.)*archive[.]ubuntu[.]com|security[.]ubuntu[.]com|ports[.]ubuntu[.]com)(/|[[:space:]]|$)' \
+	"${test_root}/apt-root/etc/apt"; then
+	printf 'Ubuntu cleartext apt source survived HTTPS normalization\n' >&2
+	exit 1
+fi
+
+mkdir -p "${test_root}/nonubuntu-root/etc/apt"
+printf 'deb http://example.invalid/ubuntu resolute main\n' \
+	>"${test_root}/nonubuntu-root/etc/apt/sources.list"
+if "${apt_source_guard}" "${test_root}/nonubuntu-root" >/dev/null 2>&1; then
+	printf 'apt source set without an official Ubuntu HTTPS source unexpectedly passed\n' >&2
+	exit 1
+fi
+
 # The previous source-only/main-only shape cannot satisfy this deployment contract.
 sed 's/downstream\/confidential-storage/main/g' "${workflow}" >"${test_root}/candidate.yml"
 if verify_workflow "${test_root}/candidate.yml" >/dev/null 2>&1; then
 	printf 'main-only publication fixture unexpectedly satisfied the contract\n' >&2
+	exit 1
+fi
+
+# Every runner package installation must remain downstream of the HTTPS guard.
+sed '/secure-ubuntu-apt-sources/d' "${workflow}" >"${test_root}/candidate.yml"
+if verify_workflow "${test_root}/candidate.yml" >/dev/null 2>&1; then
+	printf 'workflow without Ubuntu apt HTTPS guards unexpectedly satisfied the contract\n' >&2
 	exit 1
 fi
 
