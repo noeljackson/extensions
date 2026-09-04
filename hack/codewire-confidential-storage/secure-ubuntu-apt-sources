@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+die() {
+	printf 'secure-ubuntu-apt-sources: %s\n' "$*" >&2
+	exit 1
+}
+
+[[ "$#" -le 1 ]] || die "usage: $0 [root]"
+root="${1:-/}"
+[[ "${root}" == /* ]] || die "root must be an absolute path"
+root="${root%/}"
+[[ -n "${root}" ]] || root=/
+apt_dir="${root}/etc/apt"
+[[ -d "${apt_dir}" ]] || die "apt configuration directory is missing: ${apt_dir}"
+
+declare -a source_files=()
+[[ -f "${apt_dir}/apt-mirrors.txt" ]] \
+	&& source_files+=("${apt_dir}/apt-mirrors.txt")
+[[ -f "${apt_dir}/sources.list" ]] && source_files+=("${apt_dir}/sources.list")
+if [[ -d "${apt_dir}/sources.list.d" ]]; then
+	while IFS= read -r -d '' source_file; do
+		source_files+=("${source_file}")
+	done < <(
+		find "${apt_dir}/sources.list.d" -maxdepth 1 -type f \
+			\( -name '*.list' -o -name '*.sources' \) -print0 | sort -z
+	)
+fi
+((${#source_files[@]} > 0)) || die "no apt source files found beneath ${apt_dir}"
+
+ubuntu_http='http://(([[:alnum:]-]+\.)*archive[.]ubuntu[.]com|security[.]ubuntu[.]com|ports[.]ubuntu[.]com)(/|[[:space:]]|$)'
+ubuntu_https='https://(([[:alnum:]-]+\.)*archive[.]ubuntu[.]com|security[.]ubuntu[.]com|ports[.]ubuntu[.]com)(/|[[:space:]]|$)'
+regional_archive='https?://([[:alnum:]-]+\.)+archive[.]ubuntu[.]com(/|[[:space:]]|$)'
+for source_file in "${source_files[@]}"; do
+	sed -E -i \
+		-e "s#${regional_archive}#https://archive.ubuntu.com\\2#g" \
+		-e "s#${ubuntu_http}#https://\\1\\3#g" \
+		"${source_file}"
+done
+
+if grep -EHn "${regional_archive}" "${source_files[@]}"; then
+	die "a regional Ubuntu archive source was not normalized to the canonical archive"
+fi
+if grep -EHn "${ubuntu_http}" "${source_files[@]}"; then
+	die "an official Ubuntu apt source still uses cleartext HTTP"
+fi
+grep -EHq "${ubuntu_https}" "${source_files[@]}" \
+	|| die "no official Ubuntu HTTPS apt source is configured"

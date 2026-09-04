@@ -85,6 +85,7 @@ BUILDER_INPUT_FILES = {
     "hack/codewire-confidential-storage/materials.py",
     "hack/codewire-confidential-storage/publish.sh",
     "hack/codewire-confidential-storage/qemu-tcg-boot-smoke",
+    "hack/codewire-confidential-storage/secure-ubuntu-apt-sources",
     "hack/codewire-confidential-storage/test-publication-contract.sh",
     "hack/codewire-confidential-storage/test-qemu-tcg-boot-smoke.sh",
 }
@@ -1308,6 +1309,32 @@ def prepare_kata(
             'PACKAGES+=" cryptsetup-bin dmsetup e2fsprogs"',
             "add the device-mapper userspace tool to the measured guest rootfs",
         ),
+        replace_once(
+            output / "tools/osbuilder/rootfs-builder/ubuntu/config.sh",
+            "http://archive.ubuntu.com/ubuntu",
+            "https://archive.ubuntu.com/ubuntu",
+            "use HTTPS for the x86 Ubuntu rootfs package source",
+        ),
+        replace_once(
+            output / "tools/osbuilder/rootfs-builder/ubuntu/config.sh",
+            "http://ports.ubuntu.com",
+            "https://ports.ubuntu.com",
+            "use HTTPS for the non-x86 Ubuntu rootfs package source",
+        ),
+        replace_once(
+            output / "tools/osbuilder/rootfs-builder/ubuntu/Dockerfile.in",
+            "# hadolint ignore=DL3009,SC2046\nRUN apt-get update && \\\n",
+            "# hadolint ignore=DL3009,SC2046\n"
+            "RUN source_file=/etc/apt/sources.list.d/ubuntu.sources && \\\n"
+            "    test -f \"${source_file}\" && \\\n"
+            "    sed -E -i \\\n"
+            "        -e 's#http://(([[:alnum:]-]+\\.)*archive[.]ubuntu[.]com|security[.]ubuntu[.]com|ports[.]ubuntu[.]com)(/|[[:space:]]|$)#https://\\1\\3#g' \\\n"
+            "        \"${source_file}\" && \\\n"
+            "    ! grep -Eq 'http://(([[:alnum:]-]+\\.)*archive[.]ubuntu[.]com|security[.]ubuntu[.]com|ports[.]ubuntu[.]com)(/|[[:space:]]|$)' \"${source_file}\" && \\\n"
+            "    grep -Eq 'https://(([[:alnum:]-]+\\.)*archive[.]ubuntu[.]com|security[.]ubuntu[.]com|ports[.]ubuntu[.]com)(/|[[:space:]]|$)' \"${source_file}\" && \\\n"
+            "    apt-get update && \\\n",
+            "require HTTPS for the Ubuntu rootfs builder package sources",
+        ),
     ]
     verify_prepared_kata(lock, output)
     receipt_path = output.parent / f"{output.name}-materials.json"
@@ -1344,6 +1371,33 @@ def verify_prepared_kata(lock: dict[str, Any], repo: Path) -> None:
             raise MaterialError(
                 f"prepared Kata source lacks required package {package}"
             )
+    ubuntu_http = re.compile(
+        r"http://((?:[a-z0-9-]+\.)*archive\.ubuntu\.com|"
+        r"security\.ubuntu\.com|ports\.ubuntu\.com)(?:/|\s|$)"
+    )
+    if ubuntu_http.search(config):
+        raise MaterialError(
+            "prepared Kata rootfs configuration retains a cleartext Ubuntu source"
+        )
+    for expected in (
+        "https://archive.ubuntu.com/ubuntu",
+        "https://ports.ubuntu.com",
+    ):
+        if config.count(expected) != 1:
+            raise MaterialError(
+                f"prepared Kata rootfs configuration lacks exact source {expected}"
+            )
+    dockerfile = (
+        repo / "tools/osbuilder/rootfs-builder/ubuntu/Dockerfile.in"
+    ).read_text(encoding="utf-8")
+    if ubuntu_http.search(dockerfile):
+        raise MaterialError(
+            "prepared Kata rootfs builder retains a cleartext Ubuntu source"
+        )
+    if dockerfile.count("source_file=/etc/apt/sources.list.d/ubuntu.sources") != 1:
+        raise MaterialError(
+            "prepared Kata rootfs builder lacks the fail-closed HTTPS source gate"
+        )
     rootfs_builder = (repo / "tools/osbuilder/rootfs-builder/rootfs.sh").read_text(
         encoding="utf-8"
     )
