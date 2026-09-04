@@ -195,8 +195,13 @@ Components: main
 EOF
 "${apt_source_guard}" "${test_root}/apt-root"
 require_text "${test_root}/apt-root/etc/apt/apt-mirrors.txt" \
-	'https://azure.archive.ubuntu.com/ubuntu' \
-	'regional Ubuntu HTTPS source' || exit 1
+	'https://archive.ubuntu.com/ubuntu/' \
+	'canonical Ubuntu HTTPS archive source' || exit 1
+if grep -Eq 'https?://azure[.]archive[.]ubuntu[.]com' \
+	"${test_root}/apt-root/etc/apt/apt-mirrors.txt"; then
+	printf 'unreachable regional Ubuntu archive survived normalization\n' >&2
+	exit 1
+fi
 require_text "${test_root}/apt-root/etc/apt/sources.list" \
 	'https://ports.ubuntu.com/ubuntu-ports' \
 	'Ubuntu ports HTTPS source' || exit 1

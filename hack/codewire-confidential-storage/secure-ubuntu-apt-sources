@@ -31,12 +31,17 @@ fi
 
 ubuntu_http='http://(([[:alnum:]-]+\.)*archive[.]ubuntu[.]com|security[.]ubuntu[.]com|ports[.]ubuntu[.]com)(/|[[:space:]]|$)'
 ubuntu_https='https://(([[:alnum:]-]+\.)*archive[.]ubuntu[.]com|security[.]ubuntu[.]com|ports[.]ubuntu[.]com)(/|[[:space:]]|$)'
+regional_archive='https?://([[:alnum:]-]+\.)+archive[.]ubuntu[.]com(/|[[:space:]]|$)'
 for source_file in "${source_files[@]}"; do
 	sed -E -i \
-		"s#${ubuntu_http}#https://\\1\\3#g" \
+		-e "s#${regional_archive}#https://archive.ubuntu.com\\2#g" \
+		-e "s#${ubuntu_http}#https://\\1\\3#g" \
 		"${source_file}"
 done
 
+if grep -EHn "${regional_archive}" "${source_files[@]}"; then
+	die "a regional Ubuntu archive source was not normalized to the canonical archive"
+fi
 if grep -EHn "${ubuntu_http}" "${source_files[@]}"; then
 	die "an official Ubuntu apt source still uses cleartext HTTP"
 fi

@@ -63,7 +63,7 @@
   },
   "builder": {
     "source": "extensions",
-    "input_tree_sha256": "c3113ea8de5c134638627125d67e8659d0fbcb66cb32939ce5df3edb2f078547",
+    "input_tree_sha256": "77e7827f9fb9ea6d27aa46d9e5bae6c5d3f03ed83682e6638769cfe96c2f4983",
     "input_files": {
       ".github/workflows/downstream-confidential-storage.yml": "1a552d04dbbf9a6284a551f5191d5e54fcfda50cab59cd8350caca53bd4fd7f5",
       "hack/codewire-confidential-storage/base-rootfs.Dockerfile": "b5d07e12cbee83b0992cca3f2e8dee28bac8655cc96bbc1bb989adcadb70f04e",
@@ -72,8 +72,8 @@
       "hack/codewire-confidential-storage/materials.py": "9ecd4ef2b3a3f8bf2aa19472ec0202f8ef21d9690b4b624b990b49e84adec076",
       "hack/codewire-confidential-storage/publish.sh": "d0849a2d6d05193652e09a5570c53642e02b011e03680ed0a95b152a0f81b966",
       "hack/codewire-confidential-storage/qemu-tcg-boot-smoke": "1576ea04e2e61ba4915be027e6e0e8a11605ef7e7b624c2bd664b378dcca937d",
-      "hack/codewire-confidential-storage/secure-ubuntu-apt-sources": "28473c64b0fd77034a3f89cc106b183b9e6b9f4fc8bca1f202f71fca3e59342c",
-      "hack/codewire-confidential-storage/test-publication-contract.sh": "803bc55c87cbd9cec07831a75d57d087e687bdc59c0f30adedd4ea9cf061cdbe",
+      "hack/codewire-confidential-storage/secure-ubuntu-apt-sources": "9169908ff5fecaf3feb4b5d535ca798a4aca166ced2994dd38b029e8dd47d085",
+      "hack/codewire-confidential-storage/test-publication-contract.sh": "3565226199794009e531a825318457745d4ab37fc047fe2ab651800440672a22",
       "hack/codewire-confidential-storage/test-qemu-tcg-boot-smoke.sh": "54cf24fb487e32bb44546d204c00570736a06fa89d82ad4b8c4c7ca748c82521"
     }
   },
