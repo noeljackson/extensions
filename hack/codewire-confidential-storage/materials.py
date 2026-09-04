@@ -1911,6 +1911,11 @@ def verify_kata_extension_layer(data: bytes, expected_kata_version: str) -> None
         "rootfs/usr/local/bin/containerd-shim-kata-v2",
         "rootfs/usr/local/bin/containerd-shim-kata-qemu-snp-v2",
         "rootfs/usr/local/bin/kata-ctl",
+        "rootfs/usr/local/bin/qemu-system-x86_64-snp-experimental",
+        "rootfs/usr/local/libexec/qemu-system-x86_64-snp-experimental",
+        "rootfs/usr/local/lib/kata-qemu-snp-experimental/libfdt.a",
+        "rootfs/usr/local/share/kata-qemu-snp-experimental/qemu/bios.bin",
+        "rootfs/usr/local/share/ovmf/AMDSEV.fd",
         "rootfs/usr/local/share/codewire/confidential-storage/materials.spdx.json",
         "rootfs/usr/local/share/codewire/confidential-storage/provenance.in-toto.json",
         "rootfs/usr/local/share/kata-containers/configuration.toml",
@@ -1927,6 +1932,44 @@ def verify_kata_extension_layer(data: bytes, expected_kata_version: str) -> None
         raise MaterialError(
             f"Kata extension layer lacks required payload {missing_payload}"
         )
+    kernel_pattern = re.compile(
+        r"rootfs/usr/local/share/kata-containers/"
+        r"vmlinuz-[0-9]+(?:\.[0-9]+)*-[0-9]+"
+    )
+    versioned_kernels = [
+        name
+        for name, member in by_name.items()
+        if kernel_pattern.fullmatch(name) and member.isfile()
+    ]
+    if len(versioned_kernels) != 1:
+        raise MaterialError(
+            "Kata extension must contain exactly one versioned kernel, "
+            f"found {len(versioned_kernels)}"
+        )
+    kernel_link_name = "rootfs/usr/local/share/kata-containers/vmlinuz.container"
+    kernel_link = by_name.get(kernel_link_name)
+    if kernel_link is None or not kernel_link.issym():
+        raise MaterialError("Kata extension vmlinuz.container must be a symbolic link")
+    if kernel_link.linkname != Path(versioned_kernels[0]).name:
+        raise MaterialError(
+            "Kata extension vmlinuz.container does not select its exact versioned kernel"
+        )
+    for executable_name in (
+        "rootfs/usr/local/bin/qemu-system-x86_64-snp-experimental",
+        "rootfs/usr/local/libexec/qemu-system-x86_64-snp-experimental",
+    ):
+        executable = by_name[executable_name]
+        if not executable.isfile() or not executable.mode & 0o111:
+            raise MaterialError(
+                f"Kata extension executable payload is invalid: {executable_name}"
+            )
+    for nonempty_name in (
+        "rootfs/usr/local/share/ovmf/AMDSEV.fd",
+        versioned_kernels[0],
+    ):
+        payload_member = by_name[nonempty_name]
+        if not payload_member.isfile() or payload_member.size <= 0:
+            raise MaterialError(f"Kata extension payload is empty: {nonempty_name}")
     shim = by_name["rootfs/usr/local/bin/containerd-shim-kata-v2"]
     if not shim.isfile() or not shim.mode & 0o111:
         raise MaterialError("Kata runtime shim is not an executable regular file")
@@ -2039,6 +2082,18 @@ def verify_kata_extension_layer(data: bytes, expected_kata_version: str) -> None
     )
     if not isinstance(qemu_hypervisor, dict):
         raise MaterialError("Kata extension QEMU-SNP config lacks hypervisor.qemu")
+    if qemu_hypervisor.get("path") != (
+        "/usr/local/bin/qemu-system-x86_64-snp-experimental"
+    ) or qemu_hypervisor.get("valid_hypervisor_paths") != [
+        "/usr/local/bin/qemu-system-x86_64-snp-experimental"
+    ]:
+        raise MaterialError("Kata extension QEMU-SNP config has invalid QEMU paths")
+    if qemu_hypervisor.get("kernel") != (
+        "/usr/local/share/kata-containers/vmlinuz.container"
+    ):
+        raise MaterialError("Kata extension QEMU-SNP config has an invalid kernel path")
+    if qemu_hypervisor.get("firmware") != "/usr/local/share/ovmf/AMDSEV.fd":
+        raise MaterialError("Kata extension QEMU-SNP config has an invalid firmware path")
     if qemu_hypervisor.get("image") != (
         "/usr/local/share/kata-containers/kata-containers-confidential.img"
     ):

@@ -183,6 +183,32 @@ unique_file() {
   printf '%s\n' "${matches[0]}"
 }
 
+unique_directory() {
+  local root=$1
+  local pattern=$2
+  local -a matches
+  mapfile -t matches < <(
+    find "$root" -type d -path "$pattern" -print
+  )
+  [[ ${#matches[@]} -eq 1 ]] || die "expected exactly one ${pattern}, found ${#matches[@]}"
+  printf '%s\n' "${matches[0]}"
+}
+
+replace_exact_tree() {
+  local source=$1
+  local destination=$2
+  [[ -d "$source" && ! -L "$source" ]] || die "exact source tree is missing: $source"
+  [[ "$destination" == */rootfs/usr/local/* && "$destination" != */..* ]] ||
+    die "refusing unsafe extension tree destination: $destination"
+  if [[ -e "$destination" || -L "$destination" ]]; then
+    find "$destination" -depth -delete
+  fi
+  mkdir -p "$(dirname "$destination")"
+  cp -a "$source" "$destination"
+  diff -qr --no-dereference "$source" "$destination" >/dev/null ||
+    die "final extension tree differs after copying $source"
+}
+
 has_executable_mode() {
   local path=$1
   local mode
@@ -218,6 +244,8 @@ verify_kata_static() (
   require_command sfdisk
 
   local audit_dir image coco_extension_image coco_root_hash rootfs shim kata_ctl runtime_config commodity_runtime_config cdh_output resolver_output partition_json sector_size partition_start partition_size
+  local qemu_snp qemu_snp_libs qemu_snp_data firmware kernel kernel_link
+  local -a kernels
   local program_headers dynamic_tags
   audit_dir="$(new_work_dir)"
   trap 'cleanup_or_retain_work_dir "${audit_dir:-}"' EXIT
@@ -243,6 +271,28 @@ verify_kata_static() (
   fi
   kata_ctl="$(unique_file "$audit_dir" '*/opt/kata/bin/kata-ctl')"
   has_executable_mode "$kata_ctl" || die "exact Kata runtime-rs volume helper has no executable mode bit"
+  qemu_snp="$(unique_file "$audit_dir" '*/opt/kata/bin/qemu-system-x86_64-snp-experimental')"
+  has_executable_mode "$qemu_snp" || die "exact Kata QEMU-SNP binary has no executable mode bit"
+  qemu_snp_libs="$(unique_directory "$audit_dir" '*/opt/kata/lib/kata-qemu-snp-experimental')"
+  [[ -n "$(find "$qemu_snp_libs" -type f -print -quit)" ]] ||
+    die "exact Kata QEMU-SNP library tree is empty"
+  qemu_snp_data="$(unique_directory "$audit_dir" '*/opt/kata/share/kata-qemu-snp-experimental/qemu')"
+  [[ -n "$(find "$qemu_snp_data" -type f -print -quit)" ]] ||
+    die "exact Kata QEMU-SNP data tree is empty"
+  firmware="$(unique_file "$audit_dir" '*/opt/kata/share/ovmf/AMDSEV.fd')"
+  [[ -s "$firmware" ]] || die "exact Kata AMD SEV firmware is empty"
+  mapfile -t kernels < <(
+    find "$audit_dir" -regextype posix-extended -type f \
+      -regex '.*/opt/kata/share/kata-containers/vmlinuz-[0-9]+(\.[0-9]+)*-[0-9]+' -print
+  )
+  [[ ${#kernels[@]} -eq 1 ]] ||
+    die "expected exactly one versioned Kata kernel, found ${#kernels[@]}"
+  kernel="${kernels[0]}"
+  [[ -s "$kernel" ]] || die "exact Kata kernel is empty"
+  kernel_link="$(unique_file "$audit_dir" '*/opt/kata/share/kata-containers/vmlinuz.container')"
+  [[ -L "$kernel_link" ]] || die "exact Kata vmlinuz.container is not a symbolic link"
+  [[ "$(readlink "$kernel_link")" == "$(basename "$kernel")" ]] ||
+    die "exact Kata vmlinuz.container does not select the versioned kernel"
   runtime_config="$(unique_file "$audit_dir" '*/opt/kata/share/defaults/kata-containers/runtime-rs/configuration-qemu-snp-runtime-rs.toml')"
   grep -Fqx '[hypervisor.qemu]' "$runtime_config" \
     || die "runtime-rs QEMU-SNP configuration lacks its hypervisor table"
@@ -367,6 +417,8 @@ overlay_confidential_payload() {
   local rootfs=$2
   local source destination confidential_verity_params qemu_snp_config expected_overhead_memory
   local cdh_api_timeout_seconds cdh_api_timeout_ms create_container_timeout_seconds
+  local qemu_snp_libs qemu_snp_data firmware kernel kernel_link kernel_dir
+  local -a kernels
 
   source="$static_root/opt/kata/runtime-rs/bin/containerd-shim-kata-v2"
   has_executable_mode "$source" || die "exact Kata runtime-rs shim is missing or has no executable mode bit"
@@ -376,6 +428,47 @@ overlay_confidential_payload() {
   source="$static_root/opt/kata/bin/kata-ctl"
   has_executable_mode "$source" || die "exact kata-ctl is missing or has no executable mode bit"
   install -D -m 0755 "$source" "$rootfs/usr/local/bin/kata-ctl"
+
+  source="$static_root/opt/kata/bin/qemu-system-x86_64-snp-experimental"
+  has_executable_mode "$source" || die "exact QEMU-SNP binary is missing or has no executable mode bit"
+  install -D -m 0755 "$source" "$rootfs/usr/local/libexec/qemu-system-x86_64-snp-experimental"
+  cmp -s "$source" "$rootfs/usr/local/libexec/qemu-system-x86_64-snp-experimental" ||
+    die "final QEMU-SNP binary differs after copying"
+
+  qemu_snp_libs="$static_root/opt/kata/lib/kata-qemu-snp-experimental"
+  replace_exact_tree "$qemu_snp_libs" "$rootfs/usr/local/lib/kata-qemu-snp-experimental"
+  qemu_snp_data="$static_root/opt/kata/share/kata-qemu-snp-experimental/qemu"
+  replace_exact_tree "$qemu_snp_data" "$rootfs/usr/local/share/kata-qemu-snp-experimental/qemu"
+
+  firmware="$static_root/opt/kata/share/ovmf/AMDSEV.fd"
+  [[ -s "$firmware" ]] || die "exact AMD SEV firmware is missing or empty"
+  install -D -m 0644 "$firmware" "$rootfs/usr/local/share/ovmf/AMDSEV.fd"
+  cmp -s "$firmware" "$rootfs/usr/local/share/ovmf/AMDSEV.fd" ||
+    die "final AMD SEV firmware differs after copying"
+
+  mapfile -t kernels < <(
+    find "$static_root/opt/kata/share/kata-containers" -regextype posix-extended \
+      -maxdepth 1 -type f -regex '.*/vmlinuz-[0-9]+(\.[0-9]+)*-[0-9]+' -print
+  )
+  [[ ${#kernels[@]} -eq 1 ]] ||
+    die "expected exactly one versioned Kata kernel, found ${#kernels[@]}"
+  kernel="${kernels[0]}"
+  kernel_link="$static_root/opt/kata/share/kata-containers/vmlinuz.container"
+  [[ -s "$kernel" && -L "$kernel_link" ]] ||
+    die "exact Kata kernel payload is incomplete"
+  [[ "$(readlink "$kernel_link")" == "$(basename "$kernel")" ]] ||
+    die "exact Kata vmlinuz.container does not select the versioned kernel"
+  kernel_dir="$rootfs/usr/local/share/kata-containers"
+  find "$kernel_dir" -maxdepth 1 \( -type f -o -type l \) -name 'vmlinuz-*' -delete
+  if [[ -e "$kernel_dir/vmlinuz.container" || -L "$kernel_dir/vmlinuz.container" ]]; then
+    find "$kernel_dir/vmlinuz.container" -maxdepth 0 -delete
+  fi
+  install -D -m 0644 "$kernel" "$kernel_dir/$(basename "$kernel")"
+  cp -a "$kernel_link" "$kernel_dir/vmlinuz.container"
+  cmp -s "$kernel" "$kernel_dir/$(basename "$kernel")" ||
+    die "final Kata kernel differs after copying"
+  [[ "$(readlink "$kernel_dir/vmlinuz.container")" == "$(basename "$kernel")" ]] ||
+    die "final vmlinuz.container does not select the exact Kata kernel"
 
   for destination in \
     kata-containers-confidential.img \
@@ -674,6 +767,7 @@ case "$command" in
     [[ $# -eq 3 ]] || die "kata-extension requires KATA_TARBALL OUTPUT_DIRECTORY"
     verify_builder_checkout
     require_command docker
+    require_command diff
     require_command jq
     require_command python3
     require_command tar
