@@ -3,7 +3,7 @@
   "platforms": [
     "linux/amd64"
   ],
-  "source_date_epoch": 1788459434,
+  "source_date_epoch": 1788554972,
   "sources": {
     "extensions": {
       "repository": "https://github.com/noeljackson/extensions",
@@ -18,13 +18,13 @@
     },
     "guest_components": {
       "repository": "https://github.com/noeljackson/guest-components",
-      "revision": "e75bf464c533058b650634a1158e87708f7fe375",
-      "tree": "d98c15b06291cb83a3f6f8fce7eaf435c76211ed",
-      "source_date_epoch": 1788459434,
+      "revision": "a793932e8fc98a42f673d38dbb1981edacb61db6",
+      "tree": "1c37325fcb48e6f1b04f94c0fa50f9f8afd91d60",
+      "source_date_epoch": 1788554972,
       "archive": {
-        "url": "https://codeload.github.com/noeljackson/guest-components/tar.gz/e75bf464c533058b650634a1158e87708f7fe375",
-        "sha256": "3108a98f97f81951ac7f9caf61783ce3e4384ed30bb2956c3ecd12719bbcfdf1",
-        "sha512": "22c4718d3d427cca317f64b2e58d39ccb35e4465cccf6a6dc828f5099b26dc1d22de77745b32617e1b7f822808ec7329e17a79ddd157196d43f863d492d469d6"
+        "url": "https://codeload.github.com/noeljackson/guest-components/tar.gz/a793932e8fc98a42f673d38dbb1981edacb61db6",
+        "sha256": "9c1839a72062a84538db0ae9978c0545ec9c7983a7fd1a4f37ee49cd86d40e89",
+        "sha512": "08a8e9a41506e7141e29340ff5c53fd1ac53488cab1e97823858b3d9a3bd713176c20013dafbbf563aadd4d0bab99fdf9a1751699c998710af39f4c521160165"
       }
     },
     "kata_containers": {
@@ -84,8 +84,8 @@
   },
   "guest_components_images": {
     "container": {
-      "reference": "ghcr.io/noeljackson/guest-components/coco-extension@sha256:74cfc8c40157056f1712a855b81fbaa8cdd94669c03941f6bb3455942fa51393",
-      "published_tag": "e75bf464c533058b650634a1158e87708f7fe375-ubuntu26.04-amd64",
+      "reference": "ghcr.io/noeljackson/guest-components/coco-extension@sha256:1c2826f3a09a2ae3469f045755ea9fb75918ec32c384ff4d02615d790d672adc",
+      "published_tag": "a793932e8fc98a42f673d38dbb1981edacb61db6-ubuntu26.04-amd64",
       "platform": "linux/amd64",
       "source": "guest_components",
       "dockerfile": "tools/coco-extension/Dockerfile",
@@ -96,18 +96,18 @@
       },
       "attestations": {
         "provenance": {
-          "manifest": "sha256:0f229cb02dfdcb478899b2618fdf2c4c6f2b41c37fcc210859b2a5ea25321848",
-          "bundle": "sha256:2df6cd71bed196a71afcd1a98728108cacc50912da6b159a99fafec5e5fb3746"
+          "manifest": "sha256:8a2a44410c9d58ba0f6045bee79ab0fcbc0a5bf39c786e67ab4ed492d24a9e1d",
+          "bundle": "sha256:aac09b5928e99e53ceeb7d3322dc28654fd0896a092da96e58e3422990fc519c"
         },
         "sbom": {
-          "manifest": "sha256:81ea9bdfae6809c843f841612572210e4ac680317d06c045fe267a9685821786",
-          "bundle": "sha256:7177a7eca5ea48183e1a888f1aaa04395a38ad07d862974132bab3c2d6c766fc"
+          "manifest": "sha256:78bef891a350093fde4ca325eb5e96d0810151956d5ffad45a6e923d6a123de1",
+          "bundle": "sha256:a6450607af10d794ab3c7d9f689516962fced76bc45be38ba8fa548dabeb91a9"
         }
       }
     },
     "disk": {
-      "reference": "ghcr.io/noeljackson/guest-components/coco-extension-disk@sha256:a09ca3ea19660ce815629a98a9d47e12001df0ef1f5324bc6fdc8bddbf0666d5",
-      "published_tag": "e75bf464c533058b650634a1158e87708f7fe375-ubuntu26.04-amd64",
+      "reference": "ghcr.io/noeljackson/guest-components/coco-extension-disk@sha256:39891354cf96cf5e2b0f62b5ce657b0cadc099642fce811ade001c2fcb7705c8",
+      "published_tag": "a793932e8fc98a42f673d38dbb1981edacb61db6-ubuntu26.04-amd64",
       "platform": "linux/amd64",
       "source": "guest_components",
       "dockerfile": "tools/coco-extension/build-erofs-image.sh",
@@ -118,8 +118,8 @@
       },
       "attestations": {
         "provenance": {
-          "manifest": "sha256:bdc626d00ca4f87734cd7835c421fd304e245fba37cb048d84ef14c662b52bad",
-          "bundle": "sha256:c688571f179901a007ab3b06744febfc4aee329527dd24224f4c8a0a0cbc744e"
+          "manifest": "sha256:293d02f26aa2fcc40f20048b3682230e0fbcc1c4b7199f026b138601d5813ac8",
+          "bundle": "sha256:135263c404b4d766d4835b1e9e1ed8d52ec50c96857f3a54168ecc4c0d100588"
         }
       }
     }
