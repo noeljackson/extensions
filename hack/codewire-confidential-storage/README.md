@@ -10,8 +10,10 @@ QEMU smoke oracle; validation rejects a checkout that differs from that tree.
 The lock includes the accepted guest-components, Kata, downstream Trustee, and
 Extensions sources; the exact historical upstream Trustee commit used by the
 AS image; the existing Codewire Talos-extension base; the BuildKit SBOM
-scanner; and the exact `iscsi-tools` and `util-linux-tools` package inputs. The
-Guest container and disk images bind their commit-derived tags, immutable
+scanner; a digest-pinned CA donor used only to bootstrap HTTPS inside Kata's
+minimal Ubuntu builder; and the exact `iscsi-tools` and `util-linux-tools`
+package inputs. The Guest container and disk images bind their commit-derived
+tags, immutable
 manifests, workflow and recipe hashes, and available Sigstore-wrapped
 attestations; the container additionally requires exact source labels and an
 SPDX attestation. Each Trustee image binds its source commit/tree and dual-hashed
@@ -43,6 +45,9 @@ overlay. It can:
 - add `dmsetup` beside the already required `cryptsetup-bin` and `e2fsprogs` in
   the measured guest rootfs, then prove `cryptsetup`, `dmsetup`, `mkfs.ext4`, and
   `resize2fs` exist in the resulting confidential image;
+- require official Ubuntu package sources to use HTTPS, import the initial CA
+  bundle only from its immutable OCI digest, and direct both bootstrap APT
+  transactions to that bundle without disabling peer or hostname verification;
 - export the accepted Kata Talos extension base through BuildKit without
   container-runtime pseudo-files, require exactly `manifest.yaml` plus
   `rootfs/`, and overlay the exact confidential payload inside that `rootfs/`;
