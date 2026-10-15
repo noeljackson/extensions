@@ -1,0 +1,68 @@
+name: Build and publish matching WireGuard DRBD extension
+on:
+  pull_request:
+    branches: [downstream/confidential-storage]
+    paths: [.github/workflows/wireguard-drbd.yml, 'hack/wireguard-drbd/**']
+  push:
+    branches: [downstream/confidential-storage]
+    paths: [.github/workflows/wireguard-drbd.yml, 'hack/wireguard-drbd/**']
+permissions:
+  contents: read
+concurrency:
+  group: wireguard-drbd-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: false
+jobs:
+  contract:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - run: python3 hack/wireguard-drbd/test_verify.py
+  publish:
+    needs: contract
+    if: github.event_name == 'push' && github.ref == 'refs/heads/downstream/confidential-storage' && github.repository == 'noeljackson/extensions'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+        with:
+          version: v0.36.1
+          driver-opts: |
+            image=moby/buildkit@sha256:28a898719c18a33f4e8000685287fa36fd0dd9560c6440227d3a732d79bb41d8
+      - name: Install registry client
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y skopeo
+      - name: Build and inspect exact extension
+        run: python3 hack/wireguard-drbd/build.py build "$RUNNER_TEMP/wireguard-drbd"
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish inspected extension
+        id: publication
+        run: python3 hack/wireguard-drbd/build.py publish "$RUNNER_TEMP/wireguard-drbd"
+      - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-name: ${{ steps.publication.outputs.image }}
+          subject-digest: ${{ steps.publication.outputs.digest }}
+          push-to-registry: true
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: wireguard-drbd-${{ github.sha }}
+          path: ${{ runner.temp }}/wireguard-drbd/*.json
+          if-no-files-found: error
+          retention-days: 90

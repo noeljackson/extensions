@@ -1,0 +1,12 @@
+version: v1alpha1
+metadata:
+  name: drbd
+  version: 9.3.3-v1.14.0-wg-f6afafe3f382
+  author: Noel Jackson
+  description: |
+    DRBD 9.3.3 modules from the qualified AMS/FRA Linux 6.18.48-talos
+    kernel build. These preserve its module signatures and require that
+    matching kernel package; no signing key is included.
+  compatibility:
+    talos:
+      version: ">= v1.14.0"
