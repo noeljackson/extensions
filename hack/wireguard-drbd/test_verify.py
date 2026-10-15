@@ -14,6 +14,7 @@ import build
 import verify
 
 REV = 'a' * 40
+EPOCH = 1792000000
 MANIFEST = b'version: v1alpha1\n'
 MODULE = b'signed module bytes preserved verbatim'
 MODULE_PATH = 'rootfs/usr/lib/modules/6.18.48-talos/extras/drbd.ko'
@@ -34,6 +35,7 @@ class VerifyTests(unittest.TestCase):
 
     def fixture(self, change=None, wrapped=False):
         state = dict(payload={MODULE_PATH: MODULE, 'manifest.yaml': MANIFEST}, mode=0o644,
+                     mtime=EPOCH, directory_mtime=EPOCH, rewritten=str(EPOCH),
                      arch='amd64', owner=0, labels={}, subject=None,
                      predicates=['https://slsa.dev/provenance/v1', 'https://spdx.dev/Document'])
         if change:
@@ -53,13 +55,20 @@ class VerifyTests(unittest.TestCase):
             **state['labels']}))
         layer = io.BytesIO()
         with tarfile.open(fileobj=layer, mode='w:gz') as archive:
+            directory = tarfile.TarInfo('rootfs')
+            directory.type, directory.mode, directory.mtime = tarfile.DIRTYPE, 0o755, state['directory_mtime']
+            archive.addfile(directory)
             for name, data in state['payload'].items():
                 member = tarfile.TarInfo(name)
                 member.mode, member.uid, member.gid, member.size = state['mode'], state['owner'], state['owner'], len(data)
+                member.mtime = state['mtime']
                 archive.addfile(member, io.BytesIO(data))
+        layer_descriptor = blob(layer.getvalue(), 'application/vnd.oci.image.layer.v1.tar+gzip')
+        if state['rewritten'] is not None:
+            layer_descriptor['annotations'] = {'buildkit/rewritten-timestamp': state['rewritten']}
         image = blob(encoded(dict(schemaVersion=2,
                                 config=blob(encoded(config), 'application/vnd.oci.image.config.v1+json'),
-                                layers=[blob(layer.getvalue(), 'application/vnd.oci.image.layer.v1.tar+gzip')])),
+                                layers=[layer_descriptor])),
                      'application/vnd.oci.image.manifest.v1+json')
         image['platform'] = dict(architecture=state['arch'], os='linux')
         subject = state['subject'] or image['digest']
@@ -84,7 +93,7 @@ class VerifyTests(unittest.TestCase):
         return path
 
     def inspect(self, path):
-        return verify.inspect(path, REV, LOCK, MANIFEST)
+        return verify.inspect(path, REV, EPOCH, LOCK, MANIFEST)
 
     def test_complete_payload_and_attestations_accept_both_index_shapes(self):
         for wrapped in (False, True):
@@ -103,6 +112,13 @@ class VerifyTests(unittest.TestCase):
                     s['payload'][MODULE_PATH] = b'resigned or different module'
             with self.subTest(kind=kind), self.assertRaises(ValueError):
                 self.inspect(self.fixture(change))
+
+    def test_cached_stale_and_future_timestamps_fail_before_publication(self):
+        for change in ({'mtime': EPOCH - 1}, {'mtime': EPOCH + 1},
+                       {'directory_mtime': EPOCH - 1}, {'directory_mtime': EPOCH + 1},
+                       {'rewritten': None}, {'rewritten': str(EPOCH - 1)}):
+            with self.subTest(change=change), self.assertRaisesRegex(ValueError, 'epoch'):
+                self.inspect(self.fixture(lambda s: s.update(change)))
 
     def test_every_source_label_is_bound(self):
         keys = ('org.opencontainers.image.source', 'org.opencontainers.image.revision',

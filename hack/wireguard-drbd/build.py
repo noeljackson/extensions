@@ -29,9 +29,12 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('mode', choices=['build', 'verify', 'publish'])
     parser.add_argument('output', type=Path)
+    parser.add_argument('--no-cache', action='store_true', help='build without cached layers for comparison')
     args = parser.parse_args()
     git = lambda *a: subprocess.check_output(['git', *a], cwd=ROOT, text=True).strip()
     revision = git('rev-parse', 'HEAD')
+    epoch = int(git('show', '-s', '--format=%ct', 'HEAD'))
+    verify.require(not args.no_cache or args.mode == 'build', '--no-cache requires build mode')
     verify.require(re.fullmatch('[0-9a-f]{40}', revision), 'full source commit required')
     verify.require(not git('status', '--porcelain', '--untracked-files=all'), 'clean checkout required')
     verify.require(not git('ls-files', '--others', '--ignored', '--exclude-standard', 'hack/wireguard-drbd'), 'ignored build input forbidden')
@@ -51,18 +54,22 @@ def main():
         node = re.findall(r'^Name:\s+(\S+)$', builder, re.M)[-1]
         container = json.loads(subprocess.check_output(['docker', 'inspect', 'buildx_buildkit_' + node]))[0]
         verify.require(container['Config']['Image'] == BUILDKIT and container['State']['Running'], 'builder image drift')
-        epoch = git('show', '-s', '--format=%ct', 'HEAD')
         command = ['docker', 'buildx', 'build', '--platform=linux/amd64', '--network=none',
                    '--provenance=mode=max', '--sbom=true', '--progress=plain',
-                   '--build-arg=REVISION=' + revision, '--build-arg=SOURCE_DATE_EPOCH=' + epoch,
+                   '--build-arg=REVISION=' + revision, '--build-arg=SOURCE_DATE_EPOCH=' + str(epoch),
                    '--output=type=oci,dest=' + str(archive) + ',rewrite-timestamp=true',
                    '--file=' + str(HERE / 'extension.Dockerfile'), str(HERE)]
+        if args.no_cache:
+            command.append('--no-cache')
+        (output / 'build-context.json').write_text(json.dumps({
+            'revision': revision, 'source_epoch': epoch, 'no_cache': args.no_cache,
+            'command': command}, indent=2))
         with (output / 'build.log').open('x') as log:
             result = subprocess.run(command, cwd=ROOT, stdout=log, stderr=subprocess.STDOUT, timeout=600)
         if result.returncode:
             print((output / 'build.log').read_text()[-5000:], file=sys.stderr)
         result.check_returncode()
-    receipt, files = verify.inspect(archive, revision)
+    receipt, files = verify.inspect(archive, revision, epoch)
     receipt['archive_sha256'] = hashlib.sha256(archive.read_bytes()).hexdigest()
     verify.require(git('rev-parse', 'HEAD') == revision and not git('status', '--porcelain'), 'source changed')
     if args.mode != 'publish':
@@ -83,7 +90,7 @@ def main():
             old = temp / 'existing.oci.tar'
             subprocess.run(['skopeo', 'copy', '--all', '--preserve-digests', 'docker://' + reference,
                             'oci-archive:' + str(old)], check=True, timeout=180)
-            prior, _ = verify.inspect(old, revision)
+            prior, _ = verify.inspect(old, revision, epoch)
             verify.require(prior['platform_manifest'] == receipt['platform_manifest'], 'immutable payload collision')
             receipt['built_index'] = receipt['index']
             receipt['index'] = prior['index']

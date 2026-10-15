@@ -47,3 +47,20 @@ repository linkage and deployment attestation before Infra consumes the digest.
 Module byte/signing-metadata equality is not kernel acceptance: the exact
 enforcing Talos boot and staged-upgrade fixtures must load DRBD before the
 serial AMS/FRA rollout. No other worker's profile changes with this artifact.
+## Reproducible extension payload
+
+The final filesystem is normalized to the exact deployment commit epoch before
+the scratch copy. BuildKit timestamp rewriting alone preserves older cached or
+local checkout mtimes. The archive verifier rejects every file or directory
+with another timestamp, and requires the matching rewritten-timestamp layer
+annotation before any registry write.
+The final COPY also selects an epoch-qualified source directory: its cache
+otherwise ignores mtime-only changes and can reuse an older payload layer.
+
+For a new candidate, build once to populate the pinned builder, then compare
+`build OUTPUT` with `build --no-cache OTHER_OUTPUT`. Independently verify both
+archives and require equal platform manifests. After workflow publication,
+require the same platform manifest from an anonymous pull and verify the
+deployment attestation before consumption. The earlier
+`a008cb037a4825ccb109655fe989733cd34dfb9e` image is unconsumed: its local and
+hosted manifest-file timestamps differed. Keep its immutable tag intact.

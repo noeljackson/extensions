@@ -42,10 +42,11 @@ def archive_files(path):
     return files
 
 
-def inspect(path, revision, lock=None, expected_manifest=None):
+def inspect(path, revision, epoch, lock=None, expected_manifest=None):
     lock = lock or json.loads((HERE / 'package.lock.json').read_text())
     expected_manifest = expected_manifest or (HERE / 'manifest.yaml').read_bytes()
     require(re.fullmatch('[0-9a-f]{40}', revision), 'full extension revision required')
+    require(type(epoch) is int and epoch > 0, 'source epoch required')
     files = archive_files(path)
 
     def blob(desc):
@@ -79,6 +80,8 @@ def inspect(path, revision, lock=None, expected_manifest=None):
                 'io.codewire.pkgs.revision': lock['revision']}
     require(all(labels.get(k) == v for k, v in expected.items()), 'source/package labels differ')
     require(len(manifest['layers']) == 1, 'one complete extension layer required')
+    require(manifest['layers'][0].get('annotations', {}).get('buildkit/rewritten-timestamp') == str(epoch),
+            'rewritten source epoch annotation required')
     layer = blob(manifest['layers'][0])
     expected_files = dict(lock['payload_files'], **{'manifest.yaml': hashlib.sha256(expected_manifest).hexdigest()})
     allowed_dirs = {str(parent) for name in expected_files for parent in Path(name).parents if str(parent) != '.'}
@@ -87,6 +90,7 @@ def inspect(path, revision, lock=None, expected_manifest=None):
         for member in payload:
             name = member.name.rstrip('/')
             require(name not in seen and member.uid == member.gid == 0, 'duplicate or non-root payload member')
+            require(member.mtime == epoch, 'payload timestamp differs from source epoch')
             seen.add(name)
             if member.isdir():
                 require(name in allowed_dirs and member.mode & 0o7777 == 0o755, 'unexpected payload directory')
@@ -110,6 +114,7 @@ def inspect(path, revision, lock=None, expected_manifest=None):
         predicates.add(statement['predicateType'])
     require(predicates == {'https://slsa.dev/provenance/v1', 'https://spdx.dev/Document'}, 'provenance and SBOM required')
     return {'index': digest(index_raw), 'platform_manifest': image['digest'], 'revision': revision,
+            'source_epoch': epoch, 'payload_timestamps_normalized': True,
             'kernel_package': lock['kernel'], 'drbd_package': lock['package'],
             'payload_files': len(found), 'module_bytes_unchanged': True,
             'runtime_accepted': False}, files
