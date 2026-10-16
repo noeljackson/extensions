@@ -2,10 +2,15 @@
 
 The existing fleet kernel and official DRBD extension share a module-signing
 identity. A rebuilt kernel needs DRBD from that same build. `package.lock.json`
-binds the qualified public kernel/DRBD package pair, full source revision,
+binds the exact kernel/DRBD package pair, full source revision,
 module signing metadata and all 18 module-tree file hashes. The new recipe
 copies that tree unchanged and runs the upstream extension validator. It does
 not rebuild or re-sign any module or include a private signing key.
+
+The VXLAN candidate binds package source
+`cdd772fe6e4696d265303a9e2b0cdb9cd8bea211`. Its signed package pair and all
+744 package payload files passed local verification; package publication and
+this extension's archive, enforcing-boot and physical acceptance remain pending.
 
 `extension.Dockerfile` is a deployment overlay; the upstreamable source branch
 and the existing Kata publisher are unchanged. The workflow builds only DRBD
