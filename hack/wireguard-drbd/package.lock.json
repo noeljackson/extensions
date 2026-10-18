@@ -1,46 +1,46 @@
 {
   "schema": "codewire.drbd-package/v1",
   "source": "https://github.com/noeljackson/pkgs",
-  "revision": "cdd772fe6e4696d265303a9e2b0cdb9cd8bea211",
-  "kernel": "ghcr.io/noeljackson/kernel@sha256:4ac13f223f1a1600e92c8464fce1317e2d553344c9f8e607340f8d171700664b",
-  "package": "ghcr.io/noeljackson/drbd-pkg@sha256:294edc95a4d74137b18a0def286dff7a509754ed0258d1c9bc6ec6c63d97dd3e",
-  "version": "9.3.3-v1.14.0-wg-cdd772fe6e46",
+  "revision": "e676fe67c541d185b3290b8ef93375b0c84896a4",
+  "kernel": "ghcr.io/noeljackson/kernel@sha256:235dfffecca33954c36537dc35c461573596ea26195dd85893d07650d8b2b962",
+  "package": "ghcr.io/noeljackson/drbd-pkg@sha256:c54c20f622db457ee08befc5b80458d7748694b25357a294b4cb284c4682e8cc",
+  "version": "9.3.3-v1.14.0-wg-e676fe67c541",
   "release": "6.18.48-talos",
   "modules": {
     "drbd.ko": {
-      "sha256": "5b59a3b6d881fcff84e76b89d12c8af27e7a2eaf59d058ccad453f9180ecc997",
+      "sha256": "4768fbfd30bb60aa1696a4daa3851e52c2597dde0cb7f33e8a524c429346d232",
       "vermagic": "6.18.48-talos SMP preempt mod_unload modversions",
       "signer": "Build time throw-away kernel key",
-      "sig_key": "70:E2:14:CE:EE:F3:C2:54:8B:BF:E2:E7:6F:19:BA:47:22:16:23:C3",
+      "sig_key": "38:2F:41:22:1E:37:82:93:50:FE:C2:C2:5B:3B:DA:7A:8F:3C:74:E0",
       "sig_hashalgo": "sha512"
     },
     "drbd_transport_lb-tcp.ko": {
-      "sha256": "0dbba245bbd96ba9ca558e26c30e27e62ec18910129a6d3ee32bc9ec56f8cc2a",
+      "sha256": "710058fcbcda2ac61fe278afa60109e7fb3ec08a94b584d0cade0d636d3560c8",
       "vermagic": "6.18.48-talos SMP preempt mod_unload modversions",
       "signer": "Build time throw-away kernel key",
-      "sig_key": "70:E2:14:CE:EE:F3:C2:54:8B:BF:E2:E7:6F:19:BA:47:22:16:23:C3",
+      "sig_key": "38:2F:41:22:1E:37:82:93:50:FE:C2:C2:5B:3B:DA:7A:8F:3C:74:E0",
       "sig_hashalgo": "sha512"
     },
     "drbd_transport_rdma.ko": {
-      "sha256": "e9b142cb2f38f7fddf78f2a416f90b998dc1772ab02d00e9e418aab3dff27463",
+      "sha256": "ebc5fd46ecdd6ed0db81b95da526c98aad42fc3e21589b8508c04a601c32aa44",
       "vermagic": "6.18.48-talos SMP preempt mod_unload modversions",
       "signer": "Build time throw-away kernel key",
-      "sig_key": "70:E2:14:CE:EE:F3:C2:54:8B:BF:E2:E7:6F:19:BA:47:22:16:23:C3",
+      "sig_key": "38:2F:41:22:1E:37:82:93:50:FE:C2:C2:5B:3B:DA:7A:8F:3C:74:E0",
       "sig_hashalgo": "sha512"
     },
     "drbd_transport_tcp.ko": {
-      "sha256": "215c769e2924cccd545242155903aadb67b1fa9b2792da5d7d7e80c871dfb0d2",
+      "sha256": "de38055569a58b324897c31a0c25b3781804159f02b4e4d875692f937348baa4",
       "vermagic": "6.18.48-talos SMP preempt mod_unload modversions",
       "signer": "Build time throw-away kernel key",
-      "sig_key": "70:E2:14:CE:EE:F3:C2:54:8B:BF:E2:E7:6F:19:BA:47:22:16:23:C3",
+      "sig_key": "38:2F:41:22:1E:37:82:93:50:FE:C2:C2:5B:3B:DA:7A:8F:3C:74:E0",
       "sig_hashalgo": "sha512"
     }
   },
   "payload_files": {
-    "rootfs/usr/lib/modules/6.18.48-talos/extras/drbd.ko": "5b59a3b6d881fcff84e76b89d12c8af27e7a2eaf59d058ccad453f9180ecc997",
-    "rootfs/usr/lib/modules/6.18.48-talos/extras/drbd_transport_lb-tcp.ko": "0dbba245bbd96ba9ca558e26c30e27e62ec18910129a6d3ee32bc9ec56f8cc2a",
-    "rootfs/usr/lib/modules/6.18.48-talos/extras/drbd_transport_rdma.ko": "e9b142cb2f38f7fddf78f2a416f90b998dc1772ab02d00e9e418aab3dff27463",
-    "rootfs/usr/lib/modules/6.18.48-talos/extras/drbd_transport_tcp.ko": "215c769e2924cccd545242155903aadb67b1fa9b2792da5d7d7e80c871dfb0d2",
+    "rootfs/usr/lib/modules/6.18.48-talos/extras/drbd.ko": "4768fbfd30bb60aa1696a4daa3851e52c2597dde0cb7f33e8a524c429346d232",
+    "rootfs/usr/lib/modules/6.18.48-talos/extras/drbd_transport_lb-tcp.ko": "710058fcbcda2ac61fe278afa60109e7fb3ec08a94b584d0cade0d636d3560c8",
+    "rootfs/usr/lib/modules/6.18.48-talos/extras/drbd_transport_rdma.ko": "ebc5fd46ecdd6ed0db81b95da526c98aad42fc3e21589b8508c04a601c32aa44",
+    "rootfs/usr/lib/modules/6.18.48-talos/extras/drbd_transport_tcp.ko": "de38055569a58b324897c31a0c25b3781804159f02b4e4d875692f937348baa4",
     "rootfs/usr/lib/modules/6.18.48-talos/modules.alias": "15110909aafaaae4d89e1c0302a7cd0660262aae25f89e057fbfa90c4cd57cfc",
     "rootfs/usr/lib/modules/6.18.48-talos/modules.alias.bin": "eba8007533d51108d8697d7c31251c80b7de3feafe1b88fe80f44fd9f918704c",
     "rootfs/usr/lib/modules/6.18.48-talos/modules.builtin": "984ddac4339b482a8af49c35e3656d234dae04879a80bff2b8e8480cb290d2d9",

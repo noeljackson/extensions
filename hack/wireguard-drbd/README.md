@@ -7,10 +7,9 @@ module signing metadata and all 18 module-tree file hashes. The new recipe
 copies that tree unchanged and runs the upstream extension validator. It does
 not rebuild or re-sign any module or include a private signing key.
 
-The VXLAN candidate binds package source
-`cdd772fe6e4696d265303a9e2b0cdb9cd8bea211`. Its signed package pair and all
-744 package payload files passed local verification; package publication and
-this extension's archive, enforcing-boot and physical acceptance remain pending.
+The queue-bound candidate binds package source
+`e676fe67c541d185b3290b8ef93375b0c84896a4`. The signed package pair is published; this
+extension's archive, enforcing-boot and physical acceptance remain pending.
 
 `extension.Dockerfile` is a deployment overlay; the upstreamable source branch
 and the existing Kata publisher are unchanged. The workflow builds only DRBD
