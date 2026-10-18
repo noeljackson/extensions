@@ -7,8 +7,8 @@ module signing metadata and all 18 module-tree file hashes. The new recipe
 copies that tree unchanged and runs the upstream extension validator. It does
 not rebuild or re-sign any module or include a private signing key.
 
-The queue-bound candidate binds package source
-`e676fe67c541d185b3290b8ef93375b0c84896a4`. The signed package pair is published; this
+The encrypt-batch candidate binds package source
+`63f8953b22ca4bff1dcf9cc95bb9a99dfcd1cfc3`. The signed package pair is published; this
 extension's archive, enforcing-boot and physical acceptance remain pending.
 
 `extension.Dockerfile` is a deployment overlay; the upstreamable source branch

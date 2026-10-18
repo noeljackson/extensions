@@ -1,7 +1,7 @@
 version: v1alpha1
 metadata:
   name: drbd
-  version: 9.3.3-v1.14.0-wg-e676fe67c541
+  version: 9.3.3-v1.14.0-wg-63f8953b22ca
   author: Noel Jackson
   description: |
     DRBD 9.3.3 modules from the qualified AMS/FRA Linux 6.18.48-talos
