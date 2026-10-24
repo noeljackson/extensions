@@ -39,8 +39,8 @@ class MaterialTests(unittest.TestCase):
                 "1c37325fcb48e6f1b04f94c0fa50f9f8afd91d60",
             ),
             "kata_containers": (
-                "d40d8c27572803e787a061a01a2228b35b7246d3",
-                "e7417e18fb7181d2296455363647e33cbf153cab",
+                "6078fea77c84cb18563cdc6bafff9fd5fda09ab3",
+                "9376dbf4ceac65bf37f810e6d28731b279e86c86",
             ),
             "trustee": (
                 "bc76377e5a694d03a122ecf3f8272a0889dd9371",
@@ -65,7 +65,11 @@ class MaterialTests(unittest.TestCase):
         )
         self.assertEqual(
             self.lock["kata_build_contract"]["kata_version"],
-            "4.1.0",
+            "4.3.1",
+        )
+        self.assertEqual(
+            self.lock["kata_build_contract"]["cloud_hypervisor_version"],
+            "v54.0",
         )
         self.assertEqual(
             self.lock["kata_build_contract"]["qemu_snp_overhead_memory_mib"],
@@ -1060,7 +1064,7 @@ class MaterialTests(unittest.TestCase):
                 )
                 text = (first / name).read_text(encoding="utf-8")
                 self.assertNotRegex(text.lower(), r"password|private_key|admin_token")
-                self.assertIn("d40d8c27572803e787a061a01a2228b35b7246d3", text)
+                self.assertIn("6078fea77c84cb18563cdc6bafff9fd5fda09ab3", text)
             provenance = json.loads(
                 (first / "provenance.in-toto.json").read_text(encoding="utf-8")
             )
@@ -1527,21 +1531,21 @@ agent_name = "kata"
 version: v1alpha1
 metadata:
   name: kata-containers
-  version: "4.1.0"
+  version: "4.3.1"
 """
-            stale_manifest = valid_manifest.replace('"4.1.0"', '"4.0.0"')
+            stale_manifest = valid_manifest.replace('"4.3.1"', '"4.0.0"')
             (root / "manifest.yaml").write_text(valid_manifest)
             (root / "rootfs").mkdir()
-            materials.verify_talos_extension_tree(root, "4.1.0")
+            materials.verify_talos_extension_tree(root, "4.3.1")
             (root / "manifest.yaml").write_text(stale_manifest)
             with self.assertRaisesRegex(materials.MaterialError, "locked Kata version"):
-                materials.verify_talos_extension_tree(root, "4.1.0")
+                materials.verify_talos_extension_tree(root, "4.3.1")
             (root / "manifest.yaml").write_text(valid_manifest)
             (root / ".dockerenv").touch()
             with self.assertRaisesRegex(
                 materials.MaterialError, "unexpected entries.*dockerenv"
             ):
-                materials.verify_talos_extension_tree(root, "4.1.0")
+                materials.verify_talos_extension_tree(root, "4.3.1")
 
     def test_build_recipe_has_no_publication_path(self) -> None:
         recipe = (SCRIPT_DIR / "build.sh").read_text(encoding="utf-8")
@@ -1868,9 +1872,12 @@ metadata:
 version: v1alpha1
 metadata:
   name: kata-containers
-  version: "4.1.0"
+  version: "4.3.1"
 """,
             "rootfs": None,
+            "rootfs/usr/local/bin/cloud-hypervisor": b"cloud-hypervisor",
+            "rootfs/usr/local/libexec/virtiofsd": b"virtiofsd",
+            "rootfs/usr/local/share/kata-containers/vmlinux.container": b"vmlinux",
             "rootfs/usr/local/bin/containerd-shim-kata-qemu-snp-v2": b"shim",
             "rootfs/usr/local/bin/containerd-shim-kata-v2": self._static_amd64_elf(),
             "rootfs/usr/local/bin/kata-ctl": b"kata-ctl",

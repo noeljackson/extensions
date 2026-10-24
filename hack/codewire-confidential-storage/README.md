@@ -58,6 +58,11 @@ overlay. It can:
 - install the commodity Cloud Hypervisor config and shim from the same pinned
   runtime-rs archive, then parse the final OCI config and reject legacy
   Go-runtime fields before publication;
+- build the commodity Cloud Hypervisor payload from the same exact source:
+  `cloud-hypervisor` (its version must equal the lock's
+  `cloud_hypervisor_version`), `virtiofsd`, the uncompressed guest kernel and
+  the commodity guest root image, each installed as one regular file at the
+  base extension's existing path;
 - bind the confidential runtime to the 50 GiB first-use storage contract:
   image-rs accepts a per-guest resource deadline (Codewire selects 300 seconds
   for fresh attestation), CDH receives 1200 seconds for the complete zero scan

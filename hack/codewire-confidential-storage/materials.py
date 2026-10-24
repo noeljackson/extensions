@@ -524,6 +524,7 @@ def validate_lock(lock: dict[str, Any]) -> None:
         {
             "guest_artifact_variant",
             "kata_version",
+            "cloud_hypervisor_version",
             "qemu_snp_overhead_memory_mib",
             "persistent_volume_max_gib",
             "cdh_api_timeout_seconds",
@@ -543,6 +544,11 @@ def validate_lock(lock: dict[str, Any]) -> None:
         or re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", kata["kata_version"]) is None
     ):
         raise MaterialError("Kata version must be an exact semantic version")
+    if (
+        not isinstance(kata["cloud_hypervisor_version"], str)
+        or re.fullmatch(r"v[0-9]+\.[0-9]+", kata["cloud_hypervisor_version"]) is None
+    ):
+        raise MaterialError("Cloud Hypervisor version must be an exact release tag")
     if kata["qemu_snp_overhead_memory_mib"] != 2048:
         raise MaterialError(
             "Kata QEMU-SNP guest overhead must remain the locked 2048 MiB budget"
@@ -1908,6 +1914,9 @@ def verify_kata_extension_layer(data: bytes, expected_kata_version: str) -> None
         raise MaterialError("Kata extension rootfs must be a directory")
 
     required = {
+        "rootfs/usr/local/bin/cloud-hypervisor",
+        "rootfs/usr/local/libexec/virtiofsd",
+        "rootfs/usr/local/share/kata-containers/vmlinux.container",
         "rootfs/usr/local/bin/containerd-shim-kata-v2",
         "rootfs/usr/local/bin/containerd-shim-kata-qemu-snp-v2",
         "rootfs/usr/local/bin/kata-ctl",

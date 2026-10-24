@@ -22,6 +22,8 @@ source_names=(
 )
 kata_parallel_targets=(
   agent-tarball
+  cloud-hypervisor-tarball
+  virtiofsd-tarball
   pause-image-tarball
   coco-guest-components-tarball
   kernel-tarball
@@ -31,6 +33,7 @@ kata_parallel_targets=(
   serial-targets
 )
 kata_serial_targets=(
+  rootfs-image-tarball
   rootfs-image-confidential-tarball
   rootfs-image-coco-extension-tarball
   rootfs-initrd-confidential-tarball
@@ -39,7 +42,10 @@ kata_post_image_targets=(
   shim-v2-rust-tarball
 )
 kata_final_inputs=(
+  kata-static-cloud-hypervisor.tar.zst
+  kata-static-virtiofsd.tar.zst
   kata-static-kernel.tar.zst
+  kata-static-rootfs-image.tar.zst
   kata-static-ovmf-sev.tar.zst
   kata-static-qemu-snp-experimental.tar.zst
   kata-static-rootfs-image-confidential.tar.zst
@@ -319,6 +325,7 @@ coco = [image for image in images if image.get("name") == "coco"]
 if len(coco) != 1 or coco[0].get("verity_params") != root_hash_lines[0]:
     raise SystemExit("CoCo extension verity params do not match its root hash")
 PY
+  verify_commodity_payload "$audit_dir"
   commodity_runtime_config="$(unique_file "$audit_dir" '*/opt/kata/share/defaults/kata-containers/runtime-rs/configuration-clh-runtime-rs.toml')"
   grep -Fqx '[hypervisor.clh]' "$commodity_runtime_config" \
     || die "runtime-rs Cloud Hypervisor configuration lacks its hypervisor table"
@@ -410,6 +417,66 @@ PY
     || die "Talos extension manifest schema changed"
   grep -Fqx "  version: \"${kata_version}\"" "$manifest" \
     || die "Talos extension metadata does not identify the exact Kata version"
+}
+
+# The commodity Cloud Hypervisor runtime is built from the same exact Kata
+# source as the confidential runtime: the VMM, virtiofsd, guest kernel and
+# guest root image. Each is resolved to one regular file so the extension keeps
+# the fixed paths that the Talos SELinux policy labels.
+resolve_regular_file() {
+  local path=$1
+  local resolved
+  resolved="$(readlink -f "$path")" || die "cannot resolve ${path}"
+  [[ -f "$resolved" && ! -L "$resolved" && -s "$resolved" ]] \
+    || die "${path} does not resolve to one non-empty regular file"
+  printf '%s\n' "$resolved"
+}
+
+verify_commodity_payload() {
+  local static_root=$1
+  local clh virtiofsd image kernel_link kernel version expected_version
+  local -a kernels
+  clh="$(unique_file "$static_root" '*/opt/kata/bin/cloud-hypervisor')"
+  clh="$(resolve_regular_file "$clh")"
+  has_executable_mode "$clh" || die "exact Cloud Hypervisor has no executable mode bit"
+  version="$("$clh" --version)" || die "exact Cloud Hypervisor does not report its version"
+  expected_version="$(lock_value '.kata_build_contract.cloud_hypervisor_version')"
+  [[ "$version" == "cloud-hypervisor ${expected_version}" ]] \
+    || die "exact Cloud Hypervisor reports ${version}, not ${expected_version}"
+  virtiofsd="$(unique_file "$static_root" '*/opt/kata/libexec/virtiofsd')"
+  virtiofsd="$(resolve_regular_file "$virtiofsd")"
+  has_executable_mode "$virtiofsd" || die "exact virtiofsd has no executable mode bit"
+  image="$(unique_file "$static_root" '*/opt/kata/share/kata-containers/kata-containers.img')"
+  resolve_regular_file "$image" >/dev/null
+  mapfile -t kernels < <(
+    find "$static_root" -regextype posix-extended -type f \
+      -regex '.*/opt/kata/share/kata-containers/vmlinux-[0-9]+(\.[0-9]+)*-[0-9]+' -print
+  )
+  [[ ${#kernels[@]} -eq 1 ]] ||
+    die "expected exactly one versioned uncompressed Kata kernel, found ${#kernels[@]}"
+  kernel="${kernels[0]}"
+  kernel_link="$(unique_file "$static_root" '*/opt/kata/share/kata-containers/vmlinux.container')"
+  [[ -L "$kernel_link" && "$(readlink "$kernel_link")" == "$(basename "$kernel")" ]] ||
+    die "exact Kata vmlinux.container does not select the versioned kernel"
+}
+
+overlay_commodity_payload() {
+  local static_root=$1
+  local rootfs=$2
+  local source destination
+  verify_commodity_payload "$static_root"
+  for destination in \
+    bin/cloud-hypervisor:0755 \
+    libexec/virtiofsd:0755 \
+    share/kata-containers/kata-containers.img:0644 \
+    share/kata-containers/vmlinux.container:0644; do
+    source="$(unique_file "$static_root" "*/opt/kata/${destination%%:*}")"
+    source="$(resolve_regular_file "$source")"
+    rm -f "$rootfs/usr/local/${destination%%:*}"
+    install -D -m "${destination##*:}" "$source" "$rootfs/usr/local/${destination%%:*}"
+    cmp -s "$source" "$rootfs/usr/local/${destination%%:*}" \
+      || die "final commodity payload differs after copying ${destination%%:*}"
+  done
 }
 
 overlay_confidential_payload() {
@@ -792,6 +859,9 @@ case "$command" in
       "$work_dir/context/extension/manifest.yaml"
     python3 "$materials_tool" --lock "$lock_file" verify-extension-tree \
       --root "$work_dir/context/extension"
+    overlay_commodity_payload \
+      "$work_dir/static" \
+      "$work_dir/context/extension/rootfs"
     overlay_confidential_payload \
       "$work_dir/static" \
       "$work_dir/context/extension/rootfs"
