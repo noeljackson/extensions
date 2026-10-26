@@ -1,0 +1,2 @@
+VERSION: "{{ .BUILD_ARG_ABBREV_TAG }}"
+TIER: "contrib"

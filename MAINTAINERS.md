@@ -16,6 +16,7 @@ If the field is marked as `Needs Maintainer`, it means that the package is curre
 | binfmt-misc                               | Serge Logvinov     | [sergelogvinov](https://github.com/sergelogvinov)                                        |
 | bnx2-bnx2x                                | Sidero Labs        | NA                                                                                       |
 | btrfs                                     | Enno Boland        | [Gottox](https://github.com/Gottox)                                                      |
+| cachefilesd                               | Christian Jacobsen | [ChristianJacobsen](https://github.com/ChristianJacobsen)                                |
 | chelsio-drivers                           | Sidero Labs        | NA                                                                                       |
 | chelsio-firmware                          | Sidero Labs        | NA                                                                                       |
 | cloudflared                               | Maxime Nrb         | [maxnrb](https://github.com/maxnrb)                                                      |
@@ -29,11 +30,14 @@ If the field is marked as `Needs Maintainer`, it means that the package is curre
 | gvisor                                    | Sidero Labs        | NA                                                                                       |
 | gvisor-debug                              | Sidero Labs        | NA                                                                                       |
 | hello-world-service                       | Sidero Labs        | NA                                                                                       |
+| hyperv-guest-agent                        | Ryan VanGundy      | [rmvangun](https://github.com/rmvangun)                                                  |
 | i915                                      | Sidero Labs        | NA                                                                                       |
 | intel-ice-firmware                        | Sidero Labs        | NA                                                                                       |
 | intel-ucode                               | Sidero Labs        | NA                                                                                       |
 | iscsi-tools                               | Sidero Labs        | NA                                                                                       |
 | kata-containers                           | Fabiano Fidêncio   | [fidencio](https://github.com/fidencio)                                                  |
+| kata-containers-nvidia-gpu-snp            | Calin Stefan       | [calintkd](https://github.com/calintkd)                                                  |
+| kata-containers-snp                       | Calin Stefan       | [calintkd](https://github.com/calintkd)                                                  |
 | lldpd                                     | Nokia (Niklas Wik) | [salkin](https://github.com/salkin)                                                      |
 | mdadm                                     | Serge Logvinov     | [sergelogvinov](https://github.com/sergelogvinov)                                        |
 | mei                                       | Nick Meyer         | [e3b0c442](https://github.com/e3b0c442)                                                  |
@@ -54,6 +58,7 @@ If the field is marked as `Needs Maintainer`, it means that the package is curre
 | nonfree-kmod-nvidia-lts                   | Sidero Labs        | NA                                                                                       |
 | nonfree-kmod-nvidia-production            | Sidero Labs        | NA                                                                                       |
 | panfrost                                  | Adam Cirillo       | [adamcirillo](https://github.com/adamcirillo)                                            |
+| qaic                                      | Angelos Petheriotis | [apetheriotis](https://github.com/apetheriotis)                                         |
 | qemu-guest-agent                          | Markus Reiter      | [reitermarkus](https://github.com/reitermarkus)                                          |
 | qlogic-firmware                           | Sidero Labs        | NA                                                                                       |
 | realtek-firmware                          | Sidero Labs        | NA                                                                                       |

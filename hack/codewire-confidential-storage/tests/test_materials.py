@@ -31,8 +31,8 @@ class MaterialTests(unittest.TestCase):
     def test_canonical_lock_binds_accepted_sources(self) -> None:
         expected = {
             "extensions": (
-                "0a825ae60fef6838a98edb7bca661d285e0426d9",
-                "3753e0b7b3a338587ee89b330abe486afad4b41b",
+                "b21ad13d8ec746ac5cb487ec41edcdd3d3a74a24",
+                "65b5fd9b2db8e3a3d5603ca6891f0064674a71ca",
             ),
             "guest_components": (
                 "a793932e8fc98a42f673d38dbb1981edacb61db6",
@@ -93,6 +93,81 @@ class MaterialTests(unittest.TestCase):
             self.lock["trustee_images"]["kbs"],
             self.lock["trustee_images"]["rvps"],
         )
+
+    def test_extension_tree_has_only_pinned_official_inputs(self) -> None:
+        self.assertEqual(
+            self.lock["base_images"],
+            {
+                "buildkit_sbom_scanner": (
+                    "docker.io/docker/buildkit-syft-scanner@sha256:"
+                    "79e7b013cbec16bbb436f312819a49a4a57752b2270c1a9332ae1a10fcc82a68"
+                ),
+                "go_wrapper_builder": (
+                    "docker.io/library/golang:1.26.7-alpine3.23@sha256:"
+                    "b17af760035fc2f338eed92d448a6c67f2d45438844fc6c60678fa5f99e44b57"
+                ),
+                "talos_extensions_validator": (
+                    "ghcr.io/siderolabs/extensions-validator:c0c37e7@sha256:"
+                    "3737c0e2f22e66382bddcdaab61e305eae453913ad3ba9b6096e96647daae800"
+                ),
+                "talos_fuse3": (
+                    "ghcr.io/siderolabs/fuse3:3.18.3@sha256:"
+                    "8b48ce5eaa16d452bafa46a570684325cc807ecb0f4c8351da1a37c52468d6ca"
+                ),
+                "talos_glibc": (
+                    "ghcr.io/siderolabs/glibc:2.44@sha256:"
+                    "eb4460f4063253417a21865c0a17e8a6d3b5419e64278e1d564c1d1e55c2d3c8"
+                ),
+                "ubuntu_apt_ca_bootstrap": (
+                    "docker.io/library/golang:1.26.7-alpine3.23@sha256:"
+                    "b17af760035fc2f338eed92d448a6c67f2d45438844fc6c60678fa5f99e44b57"
+                ),
+            },
+        )
+        self.assertNotIn(
+            "hack/codewire-confidential-storage/base-rootfs.Dockerfile",
+            self.lock["builder"]["input_files"],
+        )
+
+        changed = copy.deepcopy(self.lock)
+        changed["base_images"]["kata_talos_extension"] = (
+            "ghcr.io/noeljackson/kata-containers@sha256:" + "f" * 64
+        )
+        with self.assertRaisesRegex(materials.MaterialError, "base_images keys differ"):
+            materials.validate_lock(changed)
+
+        for name, reference, expected in (
+            (
+                "talos_glibc",
+                "ghcr.io/siderolabs/glibc:2.44",
+                "glibc extension must be its exact official GHCR digest",
+            ),
+            (
+                "talos_glibc",
+                "ghcr.io/noeljackson/glibc:2.44@sha256:" + "a" * 64,
+                "glibc extension must be its exact official GHCR digest",
+            ),
+            (
+                "talos_fuse3",
+                "ghcr.io/siderolabs/fuse3:3.18.2@sha256:" + "a" * 64,
+                "fuse3 extension must be its exact official GHCR digest",
+            ),
+            (
+                "talos_extensions_validator",
+                "ghcr.io/siderolabs/extensions-validator:latest@sha256:" + "a" * 64,
+                "extensions validator must be its exact official GHCR digest",
+            ),
+            (
+                "go_wrapper_builder",
+                "docker.io/library/golang:1.26.7-alpine3.23@sha256:" + "0" * 64,
+                "Go wrapper builder must be its exact Docker Hub digest",
+            ),
+        ):
+            with self.subTest(name=name, reference=reference):
+                changed = copy.deepcopy(self.lock)
+                changed["base_images"][name] = reference
+                with self.assertRaisesRegex(materials.MaterialError, expected):
+                    materials.validate_lock(changed)
 
     def test_branch_archive_and_short_revision_are_rejected(self) -> None:
         changed = copy.deepcopy(self.lock)
@@ -1524,6 +1599,312 @@ agent_name = "kata"
                     LOCK_PATH, self.lock, "kata-extension", legacy_config
                 )
 
+    def test_kata_extension_requires_static_helpers_and_stripped_qemu(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            interp = self._elf_with_program_segment(3, b"/lib64/ld-linux-x86-64.so.2\0")
+            cases = []
+            for name in (
+                "rootfs/usr/local/bin/mount.fuse",
+                "rootfs/usr/local/bin/qemu-system-x86_64-snp-experimental",
+                "rootfs/usr/local/lib/containers/nydus-for-kata-tee/containerd-nydus-grpc",
+            ):
+                entries = self._kata_extension_entries()
+                entries[name] = interp
+                cases.append((name.rsplit("/", 1)[1], entries, "PT_INTERP"))
+            entries = self._kata_extension_entries()
+            entries["rootfs/usr/local/libexec/qemu-system-x86_64-snp-experimental"] = (
+                self._elf_with_sections(
+                    [(".text", 1), (".symtab", 2), (".shstrtab", 3)]
+                )
+            )
+            cases.append(("symtab", entries, "QEMU-SNP binary is not stripped"))
+            entries = self._kata_extension_entries()
+            entries["rootfs/usr/local/libexec/qemu-system-x86_64-snp-experimental"] = (
+                self._elf_with_sections(
+                    [(".text", 1), (".debug_info", 1), (".shstrtab", 3)]
+                )
+            )
+            cases.append(("debug", entries, "QEMU-SNP binary is not stripped"))
+            entries = self._kata_extension_entries()
+            del entries[
+                "rootfs/usr/local/lib/containers/nydus-for-kata-tee/"
+                "usr/local/lib/ld-linux-x86-64.so.2"
+            ]
+            cases.append(("glibc", entries, "required payload.*ld-linux"))
+            entries = self._kata_extension_entries()
+            del entries["rootfs/usr/local/etc/containers/nydus-for-kata-tee.yaml"]
+            cases.append(("service", entries, "required payload.*nydus-for-kata-tee.yaml"))
+            for name, entries, expected in cases:
+                with self.subTest(name=name):
+                    archive, _ = self._write_oci_archive(
+                        root / name, component="kata-extension", layer_entries=entries
+                    )
+                    with self.assertRaisesRegex(materials.MaterialError, expected):
+                        materials.verify_oci_image(
+                            LOCK_PATH, self.lock, "kata-extension", archive
+                        )
+
+    def test_kata_extension_rejects_unused_qemu_firmware(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            data = "rootfs/usr/local/share/kata-qemu-snp-experimental/qemu/"
+            for name in (
+                "edk2-x86_64-code.fd",
+                "edk2-aarch64-code.fd",
+                "firmware/60-edk2-x86_64.json",
+                "hppa-firmware64.img",
+                "s390-ccw.img",
+                "slof.bin",
+                "vof-nvram.bin",
+                "pnv-pnor.bin",
+                "qemu_vga.ndrv",
+                "npcm8xx_bootrom.bin",
+                "qemu-nsis.bmp",
+            ):
+                with self.subTest(name=name):
+                    entries = self._kata_extension_entries()
+                    entries[data + name] = b"rom"
+                    archive, _ = self._write_oci_archive(
+                        root / name.replace("/", "-"),
+                        component="kata-extension",
+                        layer_entries=entries,
+                    )
+                    with self.assertRaisesRegex(
+                        materials.MaterialError, "unused QEMU-SNP firmware"
+                    ):
+                        materials.verify_oci_image(
+                            LOCK_PATH, self.lock, "kata-extension", archive
+                        )
+            entries = self._kata_extension_entries()
+            for name in ("bios-256k.bin", "kvmvapic.bin", "efi-virtio.rom", "pvh.bin"):
+                entries[data + name] = b"x86-rom"
+            archive, _ = self._write_oci_archive(
+                root / "x86-roms", component="kata-extension", layer_entries=entries
+            )
+            materials.verify_oci_image(LOCK_PATH, self.lock, "kata-extension", archive)
+
+    def test_kata_extension_binds_cri_handlers_and_distinct_roots(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            part_name = "rootfs/etc/cri/conf.d/10-kata-containers.part"
+            part = self._kata_extension_entries()[part_name]
+            snp_config = (
+                b'ConfigPath = "/usr/local/share/kata-containers/'
+                b'configuration-qemu-snp.toml"'
+            )
+            cases = [
+                (
+                    "snp-commodity-config",
+                    part.replace(
+                        snp_config,
+                        b'ConfigPath = "/usr/local/share/kata-containers/configuration.toml"',
+                    ),
+                    "kata-qemu-snp is not bound",
+                ),
+                (
+                    "snp-go-shim",
+                    part.replace(
+                        b'runtime_type = "io.containerd.kata-qemu-snp.v2"',
+                        b'runtime_type = "io.containerd.kata.v2"',
+                    ),
+                    "kata-qemu-snp is not bound",
+                ),
+                (
+                    "missing-handler",
+                    part.split(b"# Expose an explicit Cloud Hypervisor", 1)[0],
+                    "handlers must be exactly",
+                ),
+                (
+                    "missing-snapshotter",
+                    part.split(b"[proxy_plugins.", 1)[0],
+                    "nydus-for-kata-tee snapshotter",
+                ),
+            ]
+            for name, replacement, expected in cases:
+                with self.subTest(name=name):
+                    self.assertNotEqual(replacement, part)
+                    entries = self._kata_extension_entries()
+                    entries[part_name] = replacement
+                    archive, _ = self._write_oci_archive(
+                        root / name, component="kata-extension", layer_entries=entries
+                    )
+                    with self.assertRaisesRegex(materials.MaterialError, expected):
+                        materials.verify_oci_image(
+                            LOCK_PATH, self.lock, "kata-extension", archive
+                        )
+            entries = self._kata_extension_entries()
+            entries["rootfs/usr/local/share/kata-containers/kata-containers.img"] = (
+                "kata-containers-confidential.img"
+            )
+            archive, _ = self._write_oci_archive(
+                root / "shared-root", component="kata-extension", layer_entries=entries
+            )
+            with self.assertRaisesRegex(materials.MaterialError, "distinct regular file"):
+                materials.verify_oci_image(LOCK_PATH, self.lock, "kata-extension", archive)
+
+    def test_handler_config_is_the_kata_default_with_path_rewrites(self) -> None:
+        clh_default = """\
+# Copyright (c) Kata Containers
+[hypervisor.clh]
+path = "/opt/kata/bin/cloud-hypervisor"
+kernel = "/opt/kata/share/kata-containers/vmlinux.container"
+image = "/opt/kata/share/kata-containers/kata-containers.img"
+firmware = ""
+enable_annotations = ["enable_iommu", "kernel_params"]
+valid_hypervisor_paths = ["/opt/kata/bin/cloud-hypervisor"]
+shared_fs = "virtio-fs"
+virtio_fs_daemon = "/opt/kata/libexec/virtiofsd"
+default_memory = 2048
+"""
+        snp_default = """\
+[hypervisor.qemu]
+path = "/opt/kata/bin/qemu-system-x86_64-snp-experimental"
+kernel = "/opt/kata/share/kata-containers/vmlinuz.container"
+image = "/opt/kata/share/kata-containers/kata-containers.img"
+firmware = "/opt/kata/share/ovmf/AMDSEV.fd"
+enable_annotations = ["kernel_params"]
+valid_hypervisor_paths = ["/opt/kata/bin/qemu-system-x86_64-snp-experimental"]
+shared_fs = "virtio-fs"
+virtio_fs_daemon = "/opt/kata/libexec/virtiofsd"
+overhead_memory = 128
+[agent.kata]
+create_container_timeout = 30
+"""
+        snp_config = (
+            snp_default.replace("/opt/kata", "/usr/local")
+            .replace("kata-containers.img", "kata-containers-confidential.img")
+            .replace('shared_fs = "virtio-fs"', 'shared_fs = "none"')
+            .replace('["kernel_params"]', '["kernel_params", "cc_init_data"]')
+            .replace("overhead_memory = 128", "overhead_memory = 2048")
+            .replace("create_container_timeout = 30", "create_container_timeout = 1350")
+        )
+        clh_config = clh_default.replace("/opt/kata", "/usr/local").replace(
+            '"kernel_params"]', '"kernel_params", "cc_init_data"]'
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            rootfs = root / "rootfs"
+            for relative, mode in (
+                ("usr/local/bin/cloud-hypervisor", 0o755),
+                ("usr/local/bin/qemu-system-x86_64-snp-experimental", 0o755),
+                ("usr/local/libexec/virtiofsd", 0o755),
+                ("usr/local/share/kata-containers/vmlinux.container", 0o644),
+                ("usr/local/share/kata-containers/vmlinuz-7.2.2-208", 0o644),
+                ("usr/local/share/kata-containers/kata-containers.img", 0o644),
+                ("usr/local/share/kata-containers/kata-containers-confidential.img", 0o644),
+                ("usr/local/share/ovmf/AMDSEV.fd", 0o644),
+            ):
+                path = rootfs / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(b"payload")
+                path.chmod(mode)
+            (rootfs / "usr/local/share/kata-containers/vmlinuz.container").symlink_to(
+                "vmlinuz-7.2.2-208"
+            )
+
+            def check(profile: str, default: str, config: str) -> None:
+                (root / "default.toml").write_text(default)
+                (root / "config.toml").write_text(config)
+                materials.verify_handler_config(
+                    profile, root / "default.toml", root / "config.toml", rootfs
+                )
+
+            check("clh", clh_default, clh_config)
+            check("qemu-snp", snp_default, snp_config)
+
+            for name, profile, default, config, expected in (
+                (
+                    "clh-undocumented-edit",
+                    "clh",
+                    clh_default,
+                    clh_config.replace("default_memory = 2048", "default_memory = 4096"),
+                    "line 11 differs",
+                ),
+                (
+                    "clh-shared-fs-edit",
+                    "clh",
+                    clh_default,
+                    clh_config.replace('"virtio-fs"', '"none"'),
+                    "differs from its Kata default",
+                ),
+                (
+                    "snp-comment-edit",
+                    "qemu-snp",
+                    "# note\n" + snp_default,
+                    "# changed\n" + snp_config,
+                    "line 1 differs",
+                ),
+                (
+                    "opt-kata-survives",
+                    "clh",
+                    clh_default,
+                    clh_config.replace(
+                        'virtio_fs_daemon = "/usr/local/libexec/virtiofsd"',
+                        'virtio_fs_daemon = "/opt/kata/libexec/virtiofsd"',
+                    ),
+                    "retains an /opt/kata reference",
+                ),
+                (
+                    "added-line",
+                    "clh",
+                    clh_default,
+                    clh_config + "sandbox_cgroup_only = true\n",
+                    "line-for-line rewrite",
+                ),
+                (
+                    "snp-unwrapped-qemu",
+                    "qemu-snp",
+                    snp_default,
+                    snp_config.replace(
+                        'path = "/usr/local/bin/qemu-system-x86_64-snp-experimental"',
+                        'path = "/usr/local/libexec/qemu-system-x86_64-snp-experimental"',
+                    ),
+                    "invalid hypervisor paths",
+                ),
+                (
+                    "virtiofsd",
+                    "qemu-snp",
+                    snp_default.replace("libexec/virtiofsd", "bin/virtiofsd"),
+                    snp_config.replace("libexec/virtiofsd", "bin/virtiofsd"),
+                    "invalid virtiofsd path",
+                ),
+                (
+                    "missing-kernel",
+                    "qemu-snp",
+                    snp_default.replace("vmlinuz.container", "vmlinuz-6.18.35-200"),
+                    snp_config.replace("vmlinuz.container", "vmlinuz-6.18.35-200"),
+                    "kernel names no file",
+                ),
+                (
+                    "missing-firmware",
+                    "qemu-snp",
+                    snp_default.replace("AMDSEV.fd", "OVMF.fd"),
+                    snp_config.replace("AMDSEV.fd", "OVMF.fd"),
+                    "firmware names no file",
+                ),
+                (
+                    "escaping-initrd",
+                    "qemu-snp",
+                    snp_default.replace(
+                        "[hypervisor.qemu]\n",
+                        '[hypervisor.qemu]\ninitrd = "/opt/kata/../../etc/shadow"\n',
+                    ),
+                    snp_config.replace(
+                        "[hypervisor.qemu]\n",
+                        '[hypervisor.qemu]\ninitrd = "/usr/local/../../etc/shadow"\n',
+                    ),
+                    "not an extension path",
+                ),
+            ):
+                with self.subTest(name=name):
+                    with self.assertRaisesRegex(materials.MaterialError, expected):
+                        check(profile, default, config)
+
+            (rootfs / "usr/local/libexec/virtiofsd").chmod(0o644)
+            with self.assertRaisesRegex(materials.MaterialError, "not executable"):
+                check("clh", clh_default, clh_config)
+
     def test_talos_extension_tree_has_exact_top_level_contract(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -1532,6 +1913,9 @@ version: v1alpha1
 metadata:
   name: kata-containers
   version: "4.3.1"
+  compatibility:
+    talos:
+      version: ">= v1.14.0"
 """
             stale_manifest = valid_manifest.replace('"4.3.1"', '"4.0.0"')
             (root / "manifest.yaml").write_text(valid_manifest)
@@ -1540,6 +1924,19 @@ metadata:
             (root / "manifest.yaml").write_text(stale_manifest)
             with self.assertRaisesRegex(materials.MaterialError, "locked Kata version"):
                 materials.verify_talos_extension_tree(root, "4.3.1")
+            for name, manifest in (
+                ("legacy", valid_manifest.replace(">= v1.14.0", ">= v1.7.0")),
+                (
+                    "missing",
+                    valid_manifest.split("  compatibility:", 1)[0],
+                ),
+            ):
+                with self.subTest(name=name):
+                    (root / "manifest.yaml").write_text(manifest)
+                    with self.assertRaisesRegex(
+                        materials.MaterialError, "Talos >= v1.14.0 compatibility"
+                    ):
+                        materials.verify_talos_extension_tree(root, "4.3.1")
             (root / "manifest.yaml").write_text(valid_manifest)
             (root / ".dockerenv").touch()
             with self.assertRaisesRegex(
@@ -1574,7 +1971,59 @@ metadata:
         self.assertIn('mode:"no-push"', recipe)
         self.assertNotIn("docker export", recipe)
         self.assertNotIn("docker create", recipe)
-        self.assertIn("base-rootfs.Dockerfile", recipe)
+        self.assertNotIn("base-rootfs.Dockerfile", recipe)
+        self.assertNotIn("kata_talos_extension", recipe)
+        self.assertNotIn("BASE_IMAGE", recipe)
+        self.assertIn('--file "$script_dir/extension-inputs.Dockerfile"', recipe)
+        self.assertIn('"$script_dir/extension"', recipe)
+        for base_image in ("go_wrapper_builder", "talos_glibc", "talos_fuse3"):
+            self.assertIn(f"$(lock_value '.base_images.{base_image}')", recipe)
+        self.assertIn(".base_images.talos_extensions_validator", recipe)
+        self.assertIn("--network none", recipe)
+        self.assertIn("nydus-snapshotter-for-coco-guest-pull-tarball", recipe)
+        self.assertIn(
+            "kata-deploy-static-nydus-snapshotter-for-coco-guest-pull.tar.zst", recipe
+        )
+        self.assertIn("verify-handler-config", recipe)
+        self.assertIn("--profile qemu-snp", recipe)
+        self.assertIn("--profile clh", recipe)
+        self.assertIn("strip --strip-all", recipe)
+        self.assertIn("prune_qemu_snp_data", recipe)
+        assembly = recipe.split("  kata-extension)", 1)[1].split(";;", 1)[0]
+        steps = [
+            "verify_kata_static",
+            "extension-inputs.Dockerfile",
+            "verify_extension_inputs",
+            "install_extension_configuration",
+            "bind_extension_manifest_version",
+            "overlay_nydus_payload",
+            "overlay_commodity_payload",
+            "overlay_confidential_payload",
+            "verify_handler_configs",
+            "validate_talos_extension_tree",
+            "extension.Dockerfile",
+        ]
+        self.assertEqual(
+            [assembly.index(step) for step in steps],
+            sorted(assembly.index(step) for step in steps),
+        )
+        inputs = (SCRIPT_DIR / "extension-inputs.Dockerfile").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("COPY --from=talos-fuse3 /rootfs/ /rootfs/\n", inputs)
+        self.assertIn(
+            "COPY --from=talos-glibc /rootfs/ "
+            "/rootfs/usr/local/lib/containers/nydus-for-kata-tee/",
+            inputs,
+        )
+        self.assertIn("GOPROXY=off", inputs)
+        self.assertIn("CGO_ENABLED=0", inputs)
+        self.assertNotIn("noeljackson", inputs)
+        packager = (SCRIPT_DIR / "extension.Dockerfile").read_text(encoding="utf-8")
+        self.assertEqual(
+            [line for line in packager.splitlines() if line.startswith("FROM ")],
+            ["FROM scratch"],
+        )
         self.assertIn('"$work_dir/context/extension/rootfs"', recipe)
         self.assertIn(
             'built_tarball="$local_build/kata-static.tar.zst"',
@@ -1618,7 +2067,9 @@ metadata:
             '"$rootfs/usr/local/share/kata-qemu-snp-experimental/qemu"',
             recipe,
         )
-        self.assertIn("final QEMU-SNP binary differs after copying", recipe)
+        self.assertIn('"final QEMU-SNP binary"', recipe)
+        self.assertIn('die "${description} differs after copying"', recipe)
+        self.assertIn('die "${description} retains symbols or debug sections"', recipe)
         self.assertIn("final AMD SEV firmware differs after copying", recipe)
         self.assertIn("final Kata kernel differs after copying", recipe)
         self.assertIn("-name 'vmlinuz-*' -delete", recipe)
@@ -1745,7 +2196,16 @@ metadata:
                         if name
                         in {
                             "rootfs/usr/local/bin/containerd-shim-kata-v2",
+                            "rootfs/usr/local/bin/fusermount3",
+                            "rootfs/usr/local/bin/mount.fuse",
+                            "rootfs/usr/local/bin/nydus-overlayfs",
                             "rootfs/usr/local/bin/qemu-system-x86_64-snp-experimental",
+                            "rootfs/usr/local/lib/containers/nydus-for-kata-tee/"
+                            "containerd-nydus-grpc",
+                            "rootfs/usr/local/lib/containers/nydus-for-kata-tee/"
+                            "nydus-overlayfs",
+                            "rootfs/usr/local/lib/containers/nydus-for-kata-tee/"
+                            "usr/local/lib/ld-linux-x86-64.so.2",
                             "rootfs/usr/local/libexec/qemu-system-x86_64-snp-experimental",
                         }
                         else 0o644
@@ -1873,16 +2333,42 @@ version: v1alpha1
 metadata:
   name: kata-containers
   version: "4.3.1"
+  compatibility:
+    talos:
+      version: ">= v1.14.0"
 """,
             "rootfs": None,
+            "rootfs/etc/cri/conf.d/10-kata-containers.part": (
+                SCRIPT_DIR / "extension" / "10-kata-containers.part"
+            ).read_bytes(),
+            "rootfs/usr/local/bin/fusermount3": b"fusermount3",
+            "rootfs/usr/local/bin/mount.fuse": self._static_amd64_elf(),
+            "rootfs/usr/local/bin/nydus-overlayfs": self._static_amd64_elf(),
+            "rootfs/usr/local/etc/containers/nydus-for-kata-tee.yaml": (
+                SCRIPT_DIR / "extension" / "nydus-for-kata-tee.yaml"
+            ).read_bytes(),
+            "rootfs/usr/local/lib/containers/nydus-for-kata-tee/"
+            "config-guest-pulling.toml": (
+                SCRIPT_DIR / "extension" / "config-guest-pulling.toml"
+            ).read_bytes(),
+            "rootfs/usr/local/lib/containers/nydus-for-kata-tee/"
+            "containerd-nydus-grpc": self._static_amd64_elf(),
+            "rootfs/usr/local/lib/containers/nydus-for-kata-tee/"
+            "nydus-overlayfs": self._static_amd64_elf(),
+            "rootfs/usr/local/lib/containers/nydus-for-kata-tee/"
+            "usr/local/lib/ld-linux-x86-64.so.2": b"glibc-loader",
             "rootfs/usr/local/bin/cloud-hypervisor": b"cloud-hypervisor",
             "rootfs/usr/local/libexec/virtiofsd": b"virtiofsd",
             "rootfs/usr/local/share/kata-containers/vmlinux.container": b"vmlinux",
             "rootfs/usr/local/bin/containerd-shim-kata-qemu-snp-v2": b"shim",
             "rootfs/usr/local/bin/containerd-shim-kata-v2": self._static_amd64_elf(),
             "rootfs/usr/local/bin/kata-ctl": b"kata-ctl",
-            "rootfs/usr/local/bin/qemu-system-x86_64-snp-experimental": b"qemu-wrapper",
-            "rootfs/usr/local/libexec/qemu-system-x86_64-snp-experimental": b"qemu-binary",
+            "rootfs/usr/local/bin/qemu-system-x86_64-snp-experimental": (
+                self._static_amd64_elf()
+            ),
+            "rootfs/usr/local/libexec/qemu-system-x86_64-snp-experimental": (
+                self._elf_with_sections([(".text", 1), (".shstrtab", 3)])
+            ),
             "rootfs/usr/local/lib/kata-qemu-snp-experimental/libfdt.a": b"qemu-library",
             "rootfs/usr/local/share/kata-qemu-snp-experimental/qemu/bios.bin": b"qemu-data",
             "rootfs/usr/local/share/ovmf/AMDSEV.fd": b"firmware",
@@ -1931,6 +2417,41 @@ verity_params = "root_hash=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
         data[:16] = b"\x7fELF\x02\x01\x01" + b"\0" * 9
         struct.pack_into("<HHI", data, 16, 2, 62, 1)
         struct.pack_into("<HHH", data, 52, 64, 56, 0)
+        return bytes(data)
+
+    def _elf_with_sections(self, sections: list[tuple[str, int]]) -> bytes:
+        names = b"\0" + b"".join(name.encode() + b"\0" for name, _ in sections)
+        name_offsets = []
+        offset = 1
+        for name, _ in sections:
+            name_offsets.append(offset)
+            offset += len(name) + 1
+        string_index = next(
+            index + 1 for index, (_, kind) in enumerate(sections) if kind == 3
+        )
+        count = len(sections) + 1
+        names_offset = 64 + count * 64
+        data = bytearray(self._static_amd64_elf())
+        struct.pack_into("<Q", data, 40, 64)
+        struct.pack_into("<HHH", data, 58, 64, count, string_index)
+        data.extend(b"\0" * 64)
+        for (name, kind), name_offset in zip(sections, name_offsets):
+            data.extend(
+                struct.pack(
+                    "<IIQQQQIIQQ",
+                    name_offset,
+                    kind,
+                    0,
+                    0,
+                    names_offset if kind == 3 else 0,
+                    len(names) if kind == 3 else 0,
+                    0,
+                    0,
+                    1,
+                    0,
+                )
+            )
+        data.extend(names)
         return bytes(data)
 
     def _elf_with_program_segment(self, program_type: int, payload: bytes) -> bytes:

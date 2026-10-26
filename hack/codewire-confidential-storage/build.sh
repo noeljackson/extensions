@@ -30,6 +30,7 @@ kata_parallel_targets=(
   ovmf-sev-tarball
   qemu-snp-experimental-tarball
   kata-ctl-tarball
+  nydus-snapshotter-for-coco-guest-pull-tarball
   serial-targets
 )
 kata_serial_targets=(
@@ -53,6 +54,37 @@ kata_final_inputs=(
   kata-static-rootfs-initrd-confidential.tar.zst
   kata-static-shim-v2-rust.tar.zst
   kata-static-kata-ctl.tar.zst
+  kata-deploy-static-nydus-snapshotter-for-coco-guest-pull.tar.zst
+)
+# The confidential handler's QEMU binary is launched with this data directory.
+# These entries are never read for a q35 SEV-SNP guest whose firmware is the
+# explicitly configured AMD SEV OVMF build:
+# - edk2-*.fd and firmware/*.json: generic EDK2 images and their libvirt
+#   firmware descriptors; QEMU-SNP boots /usr/local/share/ovmf/AMDSEV.fd.
+# - hppa, s390, slof, vof, pnv-pnor, qemu_vga.ndrv, *_bootrom.bin: firmware
+#   for PA-RISC, s390x, POWER, and ARM board machine types.
+# - qemu-nsis.bmp: the Windows installer bitmap.
+# Every x86 option and boot ROM (SeaBIOS, kvmvapic, linuxboot, multiboot,
+# pvh, qboot, efi-virtio) stays, because QEMU loads them implicitly.
+qemu_snp_unused_data=(
+  'edk2-*.fd'
+  firmware
+  'hppa-firmware*.img'
+  's390-*.img'
+  slof.bin
+  'vof*.bin'
+  pnv-pnor.bin
+  qemu_vga.ndrv
+  '*_bootrom.bin'
+  qemu-nsis.bmp
+)
+qemu_snp_required_data=(
+  bios.bin
+  bios-256k.bin
+  kvmvapic.bin
+  linuxboot_dma.bin
+  multiboot_dma.bin
+  efi-virtio.rom
 )
 
 usage() {
@@ -83,7 +115,8 @@ Commands:
   verify-kata-static KATA_TARBALL
       Prove the confidential image contains the required block-encryption/ext4 tools.
   kata-extension KATA_TARBALL OUTPUT_DIRECTORY
-      Produce an attested amd64 OCI archive; never pushes.
+      Assemble the Talos extension from an empty tree and produce an attested
+      amd64 OCI archive; never pushes.
 Image publication is intentionally absent. OP-1 must use a separately reviewed wrapper
 that preserves these exact inputs and records the resulting registry digests.
 EOF
@@ -223,6 +256,31 @@ has_executable_mode() {
   (( (8#$mode & 0111) != 0 ))
 }
 
+# Talos host services and helpers must not depend on a host userspace ABI.
+require_static_executable() {
+  local path=$1
+  local description=$2
+  local program_headers dynamic_tags
+  [[ -f "$path" && ! -L "$path" ]] || die "${description} is not one regular file"
+  has_executable_mode "$path" || die "${description} has no executable mode bit"
+  program_headers="$(LC_ALL=C readelf -l "$path")" \
+    || die "${description} has unreadable program headers"
+  if grep -Eq 'INTERP|Requesting program interpreter' <<<"$program_headers"; then
+    die "${description} requires an ELF interpreter"
+  fi
+  dynamic_tags="$(LC_ALL=C readelf -d "$path")" \
+    || die "${description} has an unreadable dynamic section"
+  if grep -q '(NEEDED)' <<<"$dynamic_tags"; then
+    die "${description} has dynamic library dependencies"
+  fi
+}
+
+has_symbol_or_debug_sections() {
+  local sections
+  sections="$(LC_ALL=C readelf -S --wide "$1")" || die "cannot read ELF sections of $1"
+  grep -Eq '\] \.(symtab|debug_[A-Za-z_]+|zdebug_[A-Za-z_]+) ' <<<"$sections"
+}
+
 debugfs_has_any() {
   local image=$1
   local name=$2
@@ -249,7 +307,7 @@ verify_kata_static() (
   require_command readelf
   require_command sfdisk
 
-  local audit_dir image coco_extension_image coco_root_hash rootfs shim kata_ctl runtime_config commodity_runtime_config cdh_output resolver_output partition_json sector_size partition_start partition_size
+  local audit_dir image coco_extension_image coco_root_hash rootfs shim kata_ctl nydus_dir nydus_binary runtime_config commodity_runtime_config cdh_output resolver_output partition_json sector_size partition_start partition_size
   local qemu_snp qemu_snp_libs qemu_snp_data firmware kernel kernel_link
   local -a kernels
   local program_headers dynamic_tags
@@ -277,6 +335,12 @@ verify_kata_static() (
   fi
   kata_ctl="$(unique_file "$audit_dir" '*/opt/kata/bin/kata-ctl')"
   has_executable_mode "$kata_ctl" || die "exact Kata runtime-rs volume helper has no executable mode bit"
+  nydus_dir="$(unique_directory "$audit_dir" '*/opt/kata-artifacts/nydus-snapshotter')"
+  for nydus_binary in containerd-nydus-grpc nydus-overlayfs; do
+    [[ "$(unique_file "$audit_dir" "*/opt/kata-artifacts/nydus-snapshotter/${nydus_binary}")" == "$nydus_dir/$nydus_binary" ]] ||
+      die "exact Kata nydus snapshotter ${nydus_binary} is outside its component directory"
+    require_static_executable "$nydus_dir/$nydus_binary" "exact Kata nydus snapshotter ${nydus_binary}"
+  done
   qemu_snp="$(unique_file "$audit_dir" '*/opt/kata/bin/qemu-system-x86_64-snp-experimental')"
   has_executable_mode "$qemu_snp" || die "exact Kata QEMU-SNP binary has no executable mode bit"
   qemu_snp_libs="$(unique_directory "$audit_dir" '*/opt/kata/lib/kata-qemu-snp-experimental')"
@@ -498,9 +562,8 @@ overlay_confidential_payload() {
 
   source="$static_root/opt/kata/bin/qemu-system-x86_64-snp-experimental"
   has_executable_mode "$source" || die "exact QEMU-SNP binary is missing or has no executable mode bit"
-  install -D -m 0755 "$source" "$rootfs/usr/local/libexec/qemu-system-x86_64-snp-experimental"
-  cmp -s "$source" "$rootfs/usr/local/libexec/qemu-system-x86_64-snp-experimental" ||
-    die "final QEMU-SNP binary differs after copying"
+  install_stripped_executable "$source" "$rootfs/usr/local/libexec/qemu-system-x86_64-snp-experimental" \
+    "final QEMU-SNP binary"
 
   qemu_snp_libs="$static_root/opt/kata/lib/kata-qemu-snp-experimental"
   replace_exact_tree "$qemu_snp_libs" "$rootfs/usr/local/lib/kata-qemu-snp-experimental"
@@ -526,6 +589,7 @@ overlay_confidential_payload() {
   [[ "$(readlink "$kernel_link")" == "$(basename "$kernel")" ]] ||
     die "exact Kata vmlinuz.container does not select the versioned kernel"
   kernel_dir="$rootfs/usr/local/share/kata-containers"
+  mkdir -p "$kernel_dir"
   find "$kernel_dir" -maxdepth 1 \( -type f -o -type l \) -name 'vmlinuz-*' -delete
   if [[ -e "$kernel_dir/vmlinuz.container" || -L "$kernel_dir/vmlinuz.container" ]]; then
     find "$kernel_dir/vmlinuz.container" -maxdepth 0 -delete
@@ -663,6 +727,135 @@ PY
   grep -Fqx 'path = "/usr/local/share/kata-containers/kata-containers-coco-extension.img"' \
     "$rootfs/usr/local/share/kata-containers/configuration-qemu-snp.toml" \
     || die "QEMU-SNP configuration does not consume the overlaid CoCo guest extension image"
+  grep -Fqx 'firmware = "/usr/local/share/ovmf/AMDSEV.fd"' "$qemu_snp_config" \
+    || die "QEMU-SNP configuration does not boot the exact AMD SEV firmware"
+  prune_qemu_snp_data "$rootfs/usr/local/share/kata-qemu-snp-experimental/qemu"
+}
+
+# Strip the executable as upstream does for its QEMU. Kata's static build
+# already strips it, so an unchanged copy is the normal result; a binary that
+# still carries a symbol table or debug sections is stripped here instead.
+install_stripped_executable() {
+  local source=$1
+  local destination=$2
+  local description=$3
+  install -D -m 0755 "$source" "$destination"
+  if has_symbol_or_debug_sections "$source"; then
+    strip --strip-all "$destination"
+  else
+    cmp -s "$source" "$destination" || die "${description} differs after copying"
+  fi
+  has_symbol_or_debug_sections "$destination" && die "${description} retains symbols or debug sections"
+  has_executable_mode "$destination" || die "${description} has no executable mode bit"
+}
+
+prune_qemu_snp_data() {
+  local data_dir=$1
+  local pattern entry
+  local -a removals
+  [[ -d "$data_dir" && ! -L "$data_dir" && "$data_dir" == */rootfs/usr/local/share/kata-qemu-snp-experimental/qemu ]] \
+    || die "refusing to prune an unexpected QEMU data directory: $data_dir"
+  for pattern in "${qemu_snp_unused_data[@]}"; do
+    mapfile -t removals < <(find "$data_dir" -mindepth 1 -maxdepth 1 -name "$pattern" -print)
+    for entry in "${removals[@]}"; do
+      find "$entry" -depth -delete
+    done
+  done
+  for pattern in "${qemu_snp_unused_data[@]}"; do
+    [[ -z "$(find "$data_dir" -name "$pattern" -print -quit)" ]] \
+      || die "QEMU-SNP data directory retains unused firmware matching ${pattern}"
+  done
+  for entry in "${qemu_snp_required_data[@]}"; do
+    [[ -f "$data_dir/$entry" && ! -L "$data_dir/$entry" && -s "$data_dir/$entry" ]] \
+      || die "QEMU-SNP data directory lacks required x86 ROM ${entry}"
+  done
+}
+
+# Install the repository-owned extension configuration into an empty tree.
+install_extension_configuration() {
+  local extension=$1
+  local source=$script_dir/extension
+  install -D -m 0644 "$source/manifest.yaml.tmpl" "$extension/manifest.yaml"
+  install -D -m 0644 "$source/10-kata-containers.part" \
+    "$extension/rootfs/etc/cri/conf.d/10-kata-containers.part"
+  install -D -m 0644 "$source/nydus-for-kata-tee.yaml" \
+    "$extension/rootfs/usr/local/etc/containers/nydus-for-kata-tee.yaml"
+  install -D -m 0644 "$source/config-guest-pulling.toml" \
+    "$extension/rootfs/usr/local/lib/containers/nydus-for-kata-tee/config-guest-pulling.toml"
+}
+
+# The BuildKit export holds only digest-pinned inputs: the official Talos
+# fuse3 userspace, the official Talos glibc as the nydus service rootfs, and
+# the two static Go wrappers.
+verify_extension_inputs() {
+  local extension=$1
+  local rootfs=$extension/rootfs
+  local service_root=$rootfs/usr/local/lib/containers/nydus-for-kata-tee
+  local -a entries
+  mapfile -t entries < <(find "$extension" -mindepth 1 -maxdepth 1 -printf '%f\n')
+  [[ "${entries[*]}" == rootfs && -d "$rootfs" && ! -L "$rootfs" ]] \
+    || die "extension input export must contain only rootfs/"
+  has_executable_mode "$service_root/usr/local/lib/ld-linux-x86-64.so.2" \
+    || die "nydus-for-kata-tee rootfs lacks the Talos glibc dynamic loader"
+  [[ -f "$service_root/etc/ld.so.cache" ]] \
+    || die "nydus-for-kata-tee rootfs lacks the Talos glibc loader cache"
+  [[ -e "$rootfs/usr/local/lib/libfuse3.so" ]] \
+    || die "extension inputs lack the Talos fuse3 library"
+  has_executable_mode "$rootfs/usr/local/bin/fusermount3" \
+    || die "extension inputs lack the Talos fusermount3 helper"
+  require_static_executable "$rootfs/usr/local/bin/qemu-system-x86_64-snp-experimental" \
+    "QEMU-SNP data-directory wrapper"
+  require_static_executable "$rootfs/usr/local/bin/mount.fuse" "nydus mount.fuse wrapper"
+}
+
+overlay_nydus_payload() {
+  local static_root=$1
+  local rootfs=$2
+  local source_dir=$static_root/opt/kata-artifacts/nydus-snapshotter
+  local service_root=$rootfs/usr/local/lib/containers/nydus-for-kata-tee
+  local binary destination
+  [[ -d "$service_root" ]] || die "nydus-for-kata-tee service rootfs is missing"
+  for destination in \
+    "$service_root/containerd-nydus-grpc" \
+    "$service_root/nydus-overlayfs" \
+    "$rootfs/usr/local/bin/nydus-overlayfs"; do
+    binary="$source_dir/$(basename "$destination")"
+    require_static_executable "$binary" "exact Kata nydus snapshotter $(basename "$binary")"
+    rm -f "$destination"
+    install -D -m 0755 "$binary" "$destination"
+    cmp -s "$binary" "$destination" \
+      || die "final nydus payload differs after copying $(basename "$binary")"
+  done
+}
+
+# Port of the upstream Kata package test: each handler configuration is the
+# exact Kata default with only the path rewrite and the documented Codewire
+# edits, and every hypervisor, daemon, kernel, image, initrd, and firmware it
+# names is a file in this tree.
+verify_handler_configs() {
+  local static_root=$1
+  local rootfs=$2
+  local defaults=$static_root/opt/kata/share/defaults/kata-containers/runtime-rs
+  python3 "$materials_tool" --lock "$lock_file" verify-handler-config \
+    --profile clh \
+    --default "$defaults/configuration-clh-runtime-rs.toml" \
+    --config "$rootfs/usr/local/share/kata-containers/configuration.toml" \
+    --rootfs "$rootfs"
+  python3 "$materials_tool" --lock "$lock_file" verify-handler-config \
+    --profile qemu-snp \
+    --default "$defaults/configuration-qemu-snp-runtime-rs.toml" \
+    --config "$rootfs/usr/local/share/kata-containers/configuration-qemu-snp.toml" \
+    --rootfs "$rootfs"
+}
+
+validate_talos_extension_tree() {
+  local extension=$1
+  docker run --rm --network none --platform linux/amd64 \
+    --entrypoint /extensions-validator \
+    --volume "${extension}:/extension:ro" \
+    "$(lock_value '.base_images.talos_extensions_validator')" \
+    validate --rootfs=/extension --pkg-name=kata-containers \
+    || die "official Talos extensions validator rejected the extension tree"
 }
 
 command=${1:-}
@@ -837,6 +1030,8 @@ case "$command" in
     require_command diff
     require_command jq
     require_command python3
+    require_command readelf
+    require_command strip
     require_command tar
     require_command zstd
     kata_tarball=$2
@@ -846,29 +1041,41 @@ case "$command" in
     work_dir="$(new_work_dir)"
     trap 'cleanup_or_retain_work_dir "${work_dir:-}"' EXIT
     mkdir -p "$work_dir/context/extension" "$work_dir/static"
-    base_image="$(lock_value '.base_images.kata_talos_extension')"
+    # The extension starts from an empty tree. Its only non-Kata inputs are
+    # digest-pinned official Talos extensions and a digest-pinned Go toolchain.
     docker buildx build \
-      --file "$script_dir/base-rootfs.Dockerfile" \
+      --file "$script_dir/extension-inputs.Dockerfile" \
       --platform linux/amd64 \
-      --build-arg "BASE_IMAGE=${base_image}" \
+      --build-arg "GO_WRAPPER_BUILDER_IMAGE=$(lock_value '.base_images.go_wrapper_builder')" \
+      --build-arg "TALOS_GLIBC_IMAGE=$(lock_value '.base_images.talos_glibc')" \
+      --build-arg "TALOS_FUSE3_IMAGE=$(lock_value '.base_images.talos_fuse3')" \
       --output "type=local,dest=$work_dir/context/extension" \
-      "$script_dir"
+      "$script_dir/extension"
+    verify_extension_inputs "$work_dir/context/extension"
     tar --zstd -xf "$kata_tarball" -C "$work_dir/static"
+    install_extension_configuration "$work_dir/context/extension"
     bind_extension_manifest_version \
       "$work_dir/static" \
       "$work_dir/context/extension/manifest.yaml"
     python3 "$materials_tool" --lock "$lock_file" verify-extension-tree \
       --root "$work_dir/context/extension"
+    overlay_nydus_payload \
+      "$work_dir/static" \
+      "$work_dir/context/extension/rootfs"
     overlay_commodity_payload \
       "$work_dir/static" \
       "$work_dir/context/extension/rootfs"
     overlay_confidential_payload \
       "$work_dir/static" \
       "$work_dir/context/extension/rootfs"
+    verify_handler_configs \
+      "$work_dir/static" \
+      "$work_dir/context/extension/rootfs"
     python3 "$materials_tool" --lock "$lock_file" emit \
       --output-dir "$work_dir/context/extension/rootfs/usr/local/share/codewire/confidential-storage"
     python3 "$materials_tool" --lock "$lock_file" verify-extension-tree \
       --root "$work_dir/context/extension"
+    validate_talos_extension_tree "$work_dir/context/extension"
     # Let BuildKit observe real source mtimes so equal-sized measured images
     # cannot reuse stale local-context content. The OCI exporter rewrites every
     # output timestamp to SOURCE_DATE_EPOCH after content ingestion.

@@ -12,7 +12,7 @@ steps:
     prepare:
       - |
         tar -xJf util-linux.tar.xz --strip-components=1
-
+      - |
         mkdir build
         cd build
         ../configure \

@@ -79,9 +79,15 @@ GUEST_IMAGE_ATTESTATION_PREDICATES = {
 }
 BUILDER_INPUT_FILES = {
     ".github/workflows/downstream-confidential-storage.yml",
-    "hack/codewire-confidential-storage/base-rootfs.Dockerfile",
     "hack/codewire-confidential-storage/build.sh",
+    "hack/codewire-confidential-storage/extension-inputs.Dockerfile",
     "hack/codewire-confidential-storage/extension.Dockerfile",
+    "hack/codewire-confidential-storage/extension/10-kata-containers.part",
+    "hack/codewire-confidential-storage/extension/config-guest-pulling.toml",
+    "hack/codewire-confidential-storage/extension/manifest.yaml.tmpl",
+    "hack/codewire-confidential-storage/extension/mount-fuse-nydus-wrapper.go",
+    "hack/codewire-confidential-storage/extension/nydus-for-kata-tee.yaml",
+    "hack/codewire-confidential-storage/extension/qemu-snp-wrapper.go",
     "hack/codewire-confidential-storage/materials.py",
     "hack/codewire-confidential-storage/publish.sh",
     "hack/codewire-confidential-storage/qemu-tcg-boot-smoke",
@@ -90,6 +96,68 @@ BUILDER_INPUT_FILES = {
     "hack/codewire-confidential-storage/test-qemu-tcg-boot-smoke.sh",
 }
 TALOS_EXTENSION_NAMES = ["iscsi-tools", "util-linux-tools"]
+# Every image the extension build consumes, each bound to its exact repository
+# and tag and to an immutable digest. The Talos glibc and fuse3 extensions and
+# the extensions validator are the official artifacts of the Talos v1.14.4
+# extensions catalog; the extension tree has no other base.
+BASE_IMAGE_PATTERNS = {
+    "buildkit_sbom_scanner": (
+        r"docker\.io/docker/buildkit-syft-scanner@sha256:[0-9a-f]{64}",
+        "BuildKit SBOM scanner must be its exact Docker Hub digest",
+    ),
+    "go_wrapper_builder": (
+        r"docker\.io/library/golang:1\.26\.7-alpine3\.23@sha256:[0-9a-f]{64}",
+        "Go wrapper builder must be its exact Docker Hub digest",
+    ),
+    "talos_extensions_validator": (
+        r"ghcr\.io/siderolabs/extensions-validator:c0c37e7@sha256:[0-9a-f]{64}",
+        "Talos extensions validator must be its exact official GHCR digest",
+    ),
+    "talos_fuse3": (
+        r"ghcr\.io/siderolabs/fuse3:3\.18\.3@sha256:[0-9a-f]{64}",
+        "Talos fuse3 extension must be its exact official GHCR digest",
+    ),
+    "talos_glibc": (
+        r"ghcr\.io/siderolabs/glibc:2\.44@sha256:[0-9a-f]{64}",
+        "Talos glibc extension must be its exact official GHCR digest",
+    ),
+    "ubuntu_apt_ca_bootstrap": (
+        r"docker\.io/library/golang:1\.26\.7-alpine3\.23@sha256:[0-9a-f]{64}",
+        "Ubuntu APT CA bootstrap must be its exact Docker Hub digest",
+    ),
+}
+TALOS_COMPATIBILITY = ">= v1.14.0"
+KATA_HANDLER_PROFILES = {
+    "clh": {
+        "table": "clh",
+        "hypervisor": "/usr/local/bin/cloud-hypervisor",
+        # Codewire appends cc_init_data when a Kata default lacks it.
+        "edited_keys": {"enable_annotations"},
+    },
+    "qemu-snp": {
+        "table": "qemu",
+        "hypervisor": "/usr/local/bin/qemu-system-x86_64-snp-experimental",
+        # The documented confidential edits applied by build.sh.
+        "edited_keys": {
+            "cdh_api_timeout_ms",
+            "create_container_timeout",
+            "enable_annotations",
+            "image",
+            "kernel_verity_params",
+            "overhead_memory",
+            "path",
+            "shared_fs",
+            "valid_hypervisor_paths",
+        },
+    },
+}
+VIRTIO_FS_DAEMON = "/usr/local/libexec/virtiofsd"
+QEMU_SNP_DATA = "rootfs/usr/local/share/kata-qemu-snp-experimental/qemu/"
+QEMU_SNP_UNUSED_DATA = re.compile(
+    r"(?:edk2-[^/]*\.fd|firmware|hppa-firmware[^/]*\.img|s390-[^/]*\.img|slof\.bin|"
+    r"vof[^/]*\.bin|pnv-pnor\.bin|qemu_vga\.ndrv|[^/]*_bootrom\.bin|qemu-nsis\.bmp)"
+    r"(?:/.*)?"
+)
 FULL_HASH = re.compile(r"^[0-9a-f]{40}$")
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
 SHA512 = re.compile(r"^[0-9a-f]{128}$")
@@ -435,32 +503,15 @@ def validate_lock(lock: dict[str, Any]) -> None:
     base_images = lock["base_images"]
     if not isinstance(base_images, dict):
         raise MaterialError("base_images must be an object")
-    require_keys(
-        base_images,
-        {
-            "buildkit_sbom_scanner",
-            "kata_talos_extension",
-            "ubuntu_apt_ca_bootstrap",
-        },
-        "base_images",
-    )
-    if not re.fullmatch(
-        r"docker\.io/docker/buildkit-syft-scanner@sha256:[0-9a-f]{64}",
-        base_images["buildkit_sbom_scanner"],
-    ):
-        raise MaterialError("BuildKit SBOM scanner must be its exact Docker Hub digest")
-    if not re.fullmatch(
-        r"ghcr\.io/noeljackson/kata-containers@sha256:[0-9a-f]{64}",
-        base_images["kata_talos_extension"],
-    ):
-        raise MaterialError("Kata Talos base image must be its exact GHCR digest")
-    if not re.fullmatch(
-        r"docker\.io/library/golang:1\.26\.7-alpine3\.23@sha256:[0-9a-f]{64}",
-        base_images["ubuntu_apt_ca_bootstrap"],
-    ):
-        raise MaterialError(
-            "Ubuntu APT CA bootstrap must be its exact Docker Hub digest"
-        )
+    require_keys(base_images, set(BASE_IMAGE_PATTERNS), "base_images")
+    for name, (pattern, message) in sorted(BASE_IMAGE_PATTERNS.items()):
+        reference = base_images[name]
+        if (
+            not isinstance(reference, str)
+            or not re.fullmatch(pattern, reference)
+            or reference.endswith("@sha256:" + "0" * 64)
+        ):
+            raise MaterialError(message)
     guest_images = lock["guest_components_images"]
     if not isinstance(guest_images, dict) or set(guest_images) != GUEST_IMAGE_NAMES:
         raise MaterialError(
@@ -1802,6 +1853,24 @@ def verify_extension_manifest_version(data: bytes, expected_version: str) -> Non
         raise MaterialError(
             "Kata extension metadata version differs from the locked Kata version"
         )
+    compatibility = [
+        "  compatibility:",
+        "    talos:",
+        f'      version: "{TALOS_COMPATIBILITY}"',
+    ]
+    metadata_lines = lines[metadata_start + 1 : metadata_end]
+    positions = [
+        index for index, line in enumerate(metadata_lines) if line == compatibility[0]
+    ]
+    if (
+        len(positions) != 1
+        or metadata_lines[positions[0] : positions[0] + 3] != compatibility
+        or sum(line.startswith("      version:") for line in metadata_lines) != 1
+    ):
+        raise MaterialError(
+            "Kata extension manifest does not declare the Talos "
+            f"{TALOS_COMPATIBILITY} compatibility it is built for"
+        )
 
 
 def verify_talos_extension_tree(root: Path, expected_kata_version: str) -> None:
@@ -1828,38 +1897,223 @@ def verify_talos_extension_tree(root: Path, expected_kata_version: str) -> None:
         raise MaterialError("Talos extension rootfs must be a directory")
 
 
-def verify_talos_runtime_elf(data: bytes) -> None:
+def verify_talos_runtime_elf(
+    data: bytes, name: str = "Kata runtime shim"
+) -> None:
     """Reject host runtime binaries that require a userspace ABI Talos lacks."""
     if len(data) < 64 or data[:4] != b"\x7fELF":
-        raise MaterialError("Kata runtime shim is not an ELF executable")
+        raise MaterialError(f"{name} is not an ELF executable")
     if data[4] != 2 or data[5] != 1:
-        raise MaterialError("Kata runtime shim is not little-endian ELF64")
+        raise MaterialError(f"{name} is not little-endian ELF64")
     if struct.unpack_from("<H", data, 18)[0] != 62:
-        raise MaterialError("Kata runtime shim is not amd64 ELF")
+        raise MaterialError(f"{name} is not amd64 ELF")
 
     program_offset = struct.unpack_from("<Q", data, 32)[0]
     program_entry_size = struct.unpack_from("<H", data, 54)[0]
     program_count = struct.unpack_from("<H", data, 56)[0]
     if program_count and program_entry_size < 56:
-        raise MaterialError("Kata runtime shim has invalid program headers")
+        raise MaterialError(f"{name} has invalid program headers")
 
     for index in range(program_count):
         offset = program_offset + index * program_entry_size
         if offset + 56 > len(data):
-            raise MaterialError("Kata runtime shim has truncated program headers")
+            raise MaterialError(f"{name} has truncated program headers")
         program_type, _, file_offset, _, _, file_size, _, _ = struct.unpack_from(
             "<IIQQQQQQ", data, offset
         )
         if program_type == 3:  # PT_INTERP
-            raise MaterialError("Kata runtime shim contains PT_INTERP")
+            raise MaterialError(f"{name} contains PT_INTERP")
         if program_type != 2:  # PT_DYNAMIC
             continue
         if file_offset + file_size > len(data) or file_size % 16:
-            raise MaterialError("Kata runtime shim has an invalid dynamic section")
+            raise MaterialError(f"{name} has an invalid dynamic section")
         for dynamic_offset in range(file_offset, file_offset + file_size, 16):
             dynamic_tag, _ = struct.unpack_from("<QQ", data, dynamic_offset)
             if dynamic_tag == 1:  # DT_NEEDED
-                raise MaterialError("Kata runtime shim contains DT_NEEDED")
+                raise MaterialError(f"{name} contains DT_NEEDED")
+
+
+def verify_stripped_elf(data: bytes, name: str) -> None:
+    """Reject an executable that still carries a symbol table or debug sections."""
+    if len(data) < 64 or data[:4] != b"\x7fELF" or data[4] != 2 or data[5] != 1:
+        raise MaterialError(f"{name} is not a little-endian ELF64 executable")
+    section_offset = struct.unpack_from("<Q", data, 40)[0]
+    section_entry_size, section_count, names_index = struct.unpack_from(
+        "<HHH", data, 58
+    )
+    if not section_count:
+        return
+    if (
+        section_entry_size < 64
+        or names_index >= section_count
+        or section_offset + section_count * section_entry_size > len(data)
+    ):
+        raise MaterialError(f"{name} has invalid section headers")
+
+    def section(index: int) -> tuple[int, int, int, int]:
+        offset = section_offset + index * section_entry_size
+        name_offset, section_type = struct.unpack_from("<II", data, offset)
+        file_offset, size = struct.unpack_from("<QQ", data, offset + 24)
+        return name_offset, section_type, file_offset, size
+
+    _, _, names_offset, names_size = section(names_index)
+    if names_offset + names_size > len(data):
+        raise MaterialError(f"{name} has an invalid section name table")
+    names = data[names_offset : names_offset + names_size]
+    for index in range(section_count):
+        name_offset, section_type, _, _ = section(index)
+        if name_offset >= max(len(names), 1):
+            raise MaterialError(f"{name} has an invalid section name")
+        section_name = names[name_offset:].split(b"\0", 1)[0]
+        if section_type == 2 or section_name.startswith((b".debug", b".zdebug")):
+            raise MaterialError(f"{name} is not stripped")
+
+
+def resolve_in_rootfs(rootfs: Path, path: str, description: str) -> Path:
+    """Resolve an absolute in-extension path without leaving the rootfs."""
+    if not path.startswith("/usr/local/") or ".." in Path(path).parts:
+        raise MaterialError(f"{description} is not an extension path: {path!r}")
+    root = rootfs.resolve()
+    candidate = root / path.lstrip("/")
+    for _ in range(8):
+        if not candidate.is_symlink():
+            break
+        target = os.readlink(candidate)
+        candidate = (
+            root / target.lstrip("/")
+            if target.startswith("/")
+            else candidate.parent / target
+        )
+    resolved = Path(os.path.normpath(candidate))
+    if resolved != root and root not in resolved.parents:
+        raise MaterialError(f"{description} resolves outside the extension: {path}")
+    if resolved.is_symlink() or not resolved.is_file():
+        raise MaterialError(f"{description} names no file in the extension: {path}")
+    return resolved
+
+
+def verify_handler_config(
+    profile: str, default_path: Path, config_path: Path, rootfs: Path
+) -> None:
+    """Fail closed when a generated handler config drifts from its Kata default.
+
+    This ports the upstream Kata package test: the config is the release
+    default with only the /opt/kata -> /usr/local rewrite (plus the documented
+    Codewire edits for this profile), its hypervisor and virtiofsd paths are
+    exact, and every kernel, image, initrd, and firmware it names exists.
+    """
+    if profile not in KATA_HANDLER_PROFILES:
+        raise MaterialError(f"unknown Kata handler profile: {profile}")
+    contract = KATA_HANDLER_PROFILES[profile]
+    try:
+        default_text = default_path.read_text(encoding="utf-8")
+        config_text = config_path.read_text(encoding="utf-8")
+        config = tomllib.loads(config_text)
+        tomllib.loads(default_text)
+    except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError) as error:
+        raise MaterialError(
+            f"{profile} handler config is unreadable: {error}"
+        ) from error
+    if "/opt/kata" in config_text:
+        raise MaterialError(f"{profile} handler config retains an /opt/kata reference")
+
+    default_lines = default_text.splitlines()
+    config_lines = config_text.splitlines()
+    if len(default_lines) != len(config_lines):
+        raise MaterialError(
+            f"{profile} handler config is not a line-for-line rewrite "
+            "of its Kata default"
+        )
+    for number, (default_line, line) in enumerate(
+        zip(default_lines, config_lines), start=1
+    ):
+        if line == default_line.replace("/opt/kata", "/usr/local"):
+            continue
+        key = line.split("=", 1)[0].strip()
+        default_key = default_line.split("=", 1)[0].strip()
+        if (
+            "=" not in line
+            or line.lstrip().startswith("#")
+            or key != default_key
+            or key not in contract["edited_keys"]
+        ):
+            raise MaterialError(
+                f"{profile} handler config line {number} differs from its Kata "
+                "default beyond the path rewrite and documented edits"
+            )
+
+    hypervisor = config.get("hypervisor", {}).get(contract["table"])
+    if not isinstance(hypervisor, dict):
+        raise MaterialError(
+            f"{profile} handler config lacks hypervisor.{contract['table']}"
+        )
+    if hypervisor.get("path") != contract["hypervisor"] or hypervisor.get(
+        "valid_hypervisor_paths"
+    ) != [contract["hypervisor"]]:
+        raise MaterialError(f"{profile} handler config has invalid hypervisor paths")
+    if hypervisor.get("virtio_fs_daemon") != VIRTIO_FS_DAEMON:
+        raise MaterialError(f"{profile} handler config has an invalid virtiofsd path")
+    for key in ("path", "virtio_fs_daemon"):
+        executable = resolve_in_rootfs(rootfs, hypervisor[key], f"{profile} {key}")
+        if not executable.stat().st_mode & 0o111:
+            raise MaterialError(f"{profile} {key} is not executable: {hypervisor[key]}")
+    for key in ("kernel", "image", "initrd", "firmware"):
+        value = hypervisor.get(key, "")
+        if not isinstance(value, str):
+            raise MaterialError(f"{profile} handler config {key} is not a path")
+        if key in {"kernel", "image"} and not value:
+            raise MaterialError(f"{profile} handler config does not set {key}")
+        if value:
+            resolve_in_rootfs(rootfs, value, f"{profile} {key}")
+
+
+CRI_HANDLERS = {
+    "kata": ("io.containerd.kata.v2", "configuration.toml", None),
+    "kata-clh": ("io.containerd.kata.v2", "configuration.toml", None),
+    "kata-qemu-snp": (
+        "io.containerd.kata-qemu-snp.v2",
+        "configuration-qemu-snp.toml",
+        "nydus-for-kata-tee",
+    ),
+}
+
+
+def verify_cri_handlers(data: bytes) -> None:
+    """Bind each containerd runtime handler to its exact Kata configuration."""
+    try:
+        cri = tomllib.loads(data.decode("utf-8"))
+    except (UnicodeDecodeError, tomllib.TOMLDecodeError) as error:
+        raise MaterialError(
+            f"Kata extension CRI handlers are not TOML: {error}"
+        ) from error
+    try:
+        runtimes = cri["plugins"]["io.containerd.cri.v1.runtime"]["containerd"][
+            "runtimes"
+        ]
+    except (KeyError, TypeError) as error:
+        raise MaterialError("Kata extension CRI handlers lack runtimes") from error
+    if not isinstance(runtimes, dict) or set(runtimes) != set(CRI_HANDLERS):
+        raise MaterialError(
+            f"Kata extension CRI handlers must be exactly {sorted(CRI_HANDLERS)}"
+        )
+    for handler, (runtime_type, config, snapshotter) in CRI_HANDLERS.items():
+        runtime = runtimes[handler]
+        options = runtime.get("options") if isinstance(runtime, dict) else None
+        if (
+            not isinstance(options, dict)
+            or runtime.get("runtime_type") != runtime_type
+            or options.get("ConfigPath")
+            != f"/usr/local/share/kata-containers/{config}"
+            or runtime.get("snapshotter") != snapshotter
+        ):
+            raise MaterialError(
+                f"Kata extension CRI handler {handler} is not bound to {config}"
+            )
+    proxy = cri.get("proxy_plugins", {}).get("nydus-for-kata-tee")
+    if not isinstance(proxy, dict) or proxy.get("address") != (
+        "/run/nydus-for-kata-tee/containerd-nydus-grpc.sock"
+    ):
+        raise MaterialError("Kata extension lacks the nydus-for-kata-tee snapshotter")
 
 
 def verify_kata_extension_layer(data: bytes, expected_kata_version: str) -> None:
@@ -1935,12 +2189,84 @@ def verify_kata_extension_layer(data: bytes, expected_kata_version: str) -> None
         "rootfs/usr/local/share/kata-containers/kata-containers-initrd-confidential.img",
         "rootfs/usr/local/share/kata-containers/root_hash_coco-extension.txt",
         "rootfs/usr/local/share/kata-containers/root_hash_confidential.txt",
+        "rootfs/etc/cri/conf.d/10-kata-containers.part",
+        "rootfs/usr/local/bin/fusermount3",
+        "rootfs/usr/local/bin/mount.fuse",
+        "rootfs/usr/local/bin/nydus-overlayfs",
+        "rootfs/usr/local/etc/containers/nydus-for-kata-tee.yaml",
+        "rootfs/usr/local/lib/containers/nydus-for-kata-tee/config-guest-pulling.toml",
+        "rootfs/usr/local/lib/containers/nydus-for-kata-tee/containerd-nydus-grpc",
+        "rootfs/usr/local/lib/containers/nydus-for-kata-tee/nydus-overlayfs",
+        "rootfs/usr/local/lib/containers/nydus-for-kata-tee/usr/local/lib/"
+        "ld-linux-x86-64.so.2",
     }
     missing_payload = sorted(required - set(normalized))
     if missing_payload:
         raise MaterialError(
             f"Kata extension layer lacks required payload {missing_payload}"
         )
+    unused_qemu_data = sorted(
+        name
+        for name in normalized
+        if name.startswith(QEMU_SNP_DATA)
+        and QEMU_SNP_UNUSED_DATA.fullmatch(name.removeprefix(QEMU_SNP_DATA))
+    )
+    if unused_qemu_data:
+        raise MaterialError(
+            f"Kata extension retains unused QEMU-SNP firmware {unused_qemu_data}"
+        )
+    for image_name in (
+        "rootfs/usr/local/share/kata-containers/kata-containers.img",
+        "rootfs/usr/local/share/kata-containers/kata-containers-confidential.img",
+    ):
+        # The commodity and confidential roots must be distinct regular files:
+        # a shared inode lets a running CLH VM hold QEMU-SNP's image lock.
+        if not by_name[image_name].isfile() or by_name[image_name].size <= 0:
+            raise MaterialError(
+                "Kata extension guest root is not a distinct regular file: "
+                f"{image_name}"
+            )
+
+    def member_bytes(member_name: str, description: str) -> bytes:
+        member = by_name[member_name]
+        if not member.isfile():
+            raise MaterialError(f"Kata extension {description} is not a regular file")
+        try:
+            with tarfile.open(fileobj=io.BytesIO(data), mode="r:*") as layer:
+                stream = layer.extractfile(member.name)
+                if stream is None:
+                    raise MaterialError(f"Kata extension {description} is unreadable")
+                return stream.read()
+        except (OSError, tarfile.TarError) as error:
+            raise MaterialError(
+                f"Kata extension {description} is unreadable: {error}"
+            ) from error
+
+    for static_name, description in (
+        ("rootfs/usr/local/bin/mount.fuse", "nydus mount.fuse wrapper"),
+        (
+            "rootfs/usr/local/bin/qemu-system-x86_64-snp-experimental",
+            "QEMU-SNP data-directory wrapper",
+        ),
+        ("rootfs/usr/local/bin/nydus-overlayfs", "nydus-overlayfs"),
+        (
+            "rootfs/usr/local/lib/containers/nydus-for-kata-tee/containerd-nydus-grpc",
+            "nydus snapshotter",
+        ),
+    ):
+        if not by_name[static_name].mode & 0o111:
+            raise MaterialError(f"Kata extension {description} is not executable")
+        verify_talos_runtime_elf(member_bytes(static_name, description), description)
+    verify_stripped_elf(
+        member_bytes(
+            "rootfs/usr/local/libexec/qemu-system-x86_64-snp-experimental",
+            "QEMU-SNP binary",
+        ),
+        "Kata extension QEMU-SNP binary",
+    )
+    verify_cri_handlers(
+        member_bytes("rootfs/etc/cri/conf.d/10-kata-containers.part", "CRI handlers")
+    )
     kernel_pattern = re.compile(
         r"rootfs/usr/local/share/kata-containers/"
         r"vmlinuz-[0-9]+(?:\.[0-9]+)*-[0-9]+"
@@ -2494,6 +2820,14 @@ def build_parser() -> argparse.ArgumentParser:
     verify_extension_parser = subparsers.add_parser("verify-extension-tree")
     verify_extension_parser.add_argument("--root", required=True, type=Path)
 
+    handler_config_parser = subparsers.add_parser("verify-handler-config")
+    handler_config_parser.add_argument(
+        "--profile", required=True, choices=sorted(KATA_HANDLER_PROFILES)
+    )
+    handler_config_parser.add_argument("--default", required=True, type=Path)
+    handler_config_parser.add_argument("--config", required=True, type=Path)
+    handler_config_parser.add_argument("--rootfs", required=True, type=Path)
+
     emit = subparsers.add_parser("emit")
     emit.add_argument("--output-dir", required=True, type=Path)
     emit.add_argument("--artifact", action="append", default=[], type=parse_artifact)
@@ -2541,6 +2875,9 @@ def main() -> int:
                 args.root, lock["kata_build_contract"]["kata_version"]
             )
             print("Talos extension tree contains only manifest.yaml and rootfs")
+        elif args.command == "verify-handler-config":
+            verify_handler_config(args.profile, args.default, args.config, args.rootfs)
+            print(f"{args.profile} handler config is the Kata default with exact paths")
         elif args.command == "emit":
             emit_materials(
                 args.lock,

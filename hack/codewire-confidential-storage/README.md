@@ -4,15 +4,18 @@ This directory owns the exact-source, non-publishing build boundary for the
 single-node Dev confidential-storage milestone. `sources.lock.json` binds every
 source by full Git commit, Git tree, codeload SHA-256/SHA-512, and immutable OCI
 digest where an existing image is consumed. The builder itself is bound by an
-exact SHA-256 input tree covering the two Dockerfiles, build/material tools, and
-QEMU smoke oracle; validation rejects a checkout that differs from that tree.
+exact SHA-256 input tree covering the two Dockerfiles, the repository-owned
+extension inputs under `extension/`, the build/material tools, and the QEMU
+smoke oracle; validation rejects a checkout that differs from that tree.
 
 The lock includes the accepted guest-components, Kata, downstream Trustee, and
 Extensions sources; the exact historical upstream Trustee commit used by the
-AS image; the existing Codewire Talos-extension base; the BuildKit SBOM
-scanner; a digest-pinned CA donor used only to bootstrap HTTPS inside Kata's
-minimal Ubuntu builder; and the exact `iscsi-tools` and `util-linux-tools`
-package inputs. The Guest container and disk images bind their commit-derived
+AS image; the official Talos `glibc`, `fuse3`, and `extensions-validator`
+images from the Talos v1.14.4 extensions catalog; the BuildKit SBOM scanner;
+the digest-pinned Go toolchain that builds the two static extension wrappers;
+a digest-pinned CA donor used only to bootstrap HTTPS inside Kata's minimal
+Ubuntu builder; and the exact `iscsi-tools` and `util-linux-tools` package
+inputs of the Extensions release. The Guest container and disk images bind their commit-derived
 tags, immutable
 manifests, workflow and recipe hashes, and available Sigstore-wrapped
 attestations; the container additionally requires exact source labels and an
@@ -24,9 +27,11 @@ provenance attestations. The latter two Talos packages are restricted by
 contract to the `servernet-confidential-storage-only` installer profile. Infra
 owns actually selecting them on that profile.
 
-The `extensions` source entry binds the accepted Talos-extension base, while the
-separate builder input tree identifies the exact executable recipe even though
-the lock is necessarily stored beside that recipe. Kata's upstream guest-image
+The `extensions` source entry binds the head of the upstreamable source branch
+(currently the unmodified siderolabs/extensions v1.14.4 release commit) on which
+this deployment overlay is composed, while the separate builder input tree
+identifies the exact executable recipe even though the lock is necessarily
+stored beside that recipe. Kata's upstream guest-image
 recipe resolves distribution packages while it runs, so its final artifact
 digest, SBOM, and provenance—not an assumption of future byte-for-byte
 reproduction—form the immutable publication unit. Longhorn is intentionally
@@ -48,9 +53,10 @@ overlay. It can:
 - require official Ubuntu package sources to use HTTPS, import the initial CA
   bundle only from its immutable OCI digest, and direct both bootstrap APT
   transactions to that bundle without disabling peer or hostname verification;
-- export the accepted Kata Talos extension base through BuildKit without
-  container-runtime pseudo-files, require exactly `manifest.yaml` plus
-  `rootfs/`, and overlay the exact confidential payload inside that `rootfs/`;
+- assemble the Talos extension from an empty tree in the same job that builds
+  the Kata closure (see "Single-job extension assembly" below), require exactly
+  `manifest.yaml` plus `rootfs/`, and install the exact Kata payload inside that
+  `rootfs/`;
 - require runtime-rs to render OCI DNS fields as resolver directives and prove
   the built confidential guest starts with an empty `/etc/resolv.conf`, so the
   sandbox DNS supplied at launch is authoritative rather than appended to a
@@ -62,15 +68,16 @@ overlay. It can:
   `cloud-hypervisor` (its version must equal the lock's
   `cloud_hypervisor_version`), `virtiofsd`, the uncompressed guest kernel and
   the commodity guest root image, each installed as one regular file at the
-  base extension's existing path;
+  fixed path the Talos SELinux policy labels;
 - bind the confidential runtime to the 50 GiB first-use storage contract:
   image-rs accepts a per-guest resource deadline (Codewire selects 300 seconds
   for fresh attestation), CDH receives 1200 seconds for the complete zero scan
   and journaled dm-integrity initialization, and runtime-rs receives 1350
   seconds for the containing image-pull and `CreateContainer` operation;
 - build only the Dev SNP artifact closure (agent, CDH, kernel, SEV firmware,
-  SNP QEMU, runtime-rs shim, `kata-ctl`, confidential image/initrd, and the
-  composable CoCo guest-extension disk), excluding
+  SNP QEMU, runtime-rs shim, `kata-ctl`, confidential image/initrd, the
+  composable CoCo guest-extension disk, and the version-pinned, SHA-256-checked
+  nydus snapshotter for CoCo guest pull), excluding
   unrelated hypervisors and distro images from both failure scope and the final
   tarball; the verifier requires the runtime-rs shim, QEMU-SNP configuration,
   and every configured guest-extension image at their canonical archive paths
@@ -79,6 +86,49 @@ overlay. It can:
   static tarball or final extension layer whose shim contains `PT_INTERP` or
   `DT_NEEDED`, preserving the Talos host ABI;
 - emit deterministic SPDX 2.3 material SBOM and SLSA/in-toto provenance JSON.
+
+## Single-job extension assembly
+
+One workflow job builds the Kata closure and then the extension; the closure is
+never preserved or published separately, and there is no hand-pushed base
+image. `build.sh kata-extension` starts from an empty tree and produces each
+part as follows:
+
+| Extension content | Produced from |
+| --- | --- |
+| `manifest.yaml` | `extension/manifest.yaml.tmpl`, with `metadata.version` bound to the closure `VERSION` and Talos compatibility `>= v1.14.0` |
+| `etc/cri/conf.d/10-kata-containers.part` | `extension/10-kata-containers.part` (`kata`, `kata-clh`, `kata-qemu-snp`, and the `nydus-for-kata-tee` proxy snapshotter) |
+| `usr/local/etc/containers/nydus-for-kata-tee.yaml`, `.../nydus-for-kata-tee/config-guest-pulling.toml` | `extension/` |
+| `containerd-nydus-grpc`, `nydus-overlayfs` | Kata's `nydus-snapshotter-for-coco-guest-pull-tarball` target in the same closure build |
+| `usr/local/bin/qemu-system-x86_64-snp-experimental`, `usr/local/bin/mount.fuse` | `extension/*.go`, built static in the locked Go toolchain image with the module proxy disabled |
+| fuse3 userspace at the extension root | the official `ghcr.io/siderolabs/fuse3` image, by digest |
+| glibc for the nydus service rootfs | the official `ghcr.io/siderolabs/glibc` image, by digest |
+| shim, `kata-ctl`, QEMU-SNP, OVMF, kernels, guest images, `virtiofsd`, Cloud Hypervisor, both handler configs | the exact Kata closure |
+
+`extension-inputs.Dockerfile` assembles the image-derived inputs and is
+exported with the BuildKit local exporter; `extension.Dockerfile` remains the
+`FROM scratch` packager that adds the SBOM and provenance attestations.
+
+The handler configurations are generated from the closure's runtime-rs
+defaults. Porting the upstream Kata package test, `materials.py
+verify-handler-config` fails the build unless each generated file is a
+line-for-line copy of its default with only the `/opt/kata` -> `/usr/local`
+rewrite and the documented edits (`cc_init_data` for both; for QEMU-SNP the
+confidential image, wrapper path, `shared_fs = "none"`, memory overhead, CDH and
+`CreateContainer` deadlines, and the confidential root measurement), names the
+exact `path`, `valid_hypervisor_paths`, and
+`virtio_fs_daemon = "/usr/local/libexec/virtiofsd"`, names a `kernel`, `image`,
+`initrd`, and `firmware` that exist in the tree, and retains no `/opt/kata`.
+
+The QEMU-SNP executable must carry no symbol table or debug sections (Kata's
+static build already strips it; an unstripped binary is stripped). Its data
+directory drops only files a q35 SEV-SNP guest never reads: the generic EDK2
+images and their libvirt firmware descriptors (QEMU-SNP boots the configured
+`AMDSEV.fd`), PA-RISC, s390x, POWER, and ARM board firmware, and the Windows
+installer bitmap. Every x86 option and boot ROM stays. Finally the official
+Talos `extensions-validator` checks the tree with networking disabled, and the
+OCI layer verifier repeats the payload, CRI handler, static-helper, stripped
+QEMU, and pruned-firmware checks on the archive itself.
 
 Run the source-only gates:
 

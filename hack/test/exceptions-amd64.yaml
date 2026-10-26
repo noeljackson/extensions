@@ -1,12 +1,18 @@
 - images:
     - registry.dev.siderolabs.io/siderolabs/dvb-cx23885
     - registry.dev.siderolabs.io/siderolabs/dvb-m88ds3103
+    - registry.dev.siderolabs.io/siderolabs/intel-hd-audio
     - registry.dev.siderolabs.io/siderolabs/usb-audio-drivers
   files:
     - rootfs/usr/lib/modules/*/kernel/sound/core/snd-pcm.ko
     - rootfs/usr/lib/modules/*/kernel/sound/core/snd-timer.ko
     - rootfs/usr/lib/modules/*/kernel/sound/core/snd.ko
     - rootfs/usr/lib/modules/*/kernel/sound/soundcore.ko
+- images:
+    - registry.dev.siderolabs.io/siderolabs/intel-hd-audio
+    - registry.dev.siderolabs.io/siderolabs/usb-audio-drivers
+  files:
+    - rootfs/usr/lib/modules/*/kernel/sound/core/snd-hwdep.ko
 - images:
     - registry.dev.siderolabs.io/siderolabs/dvb-cx23885
     - registry.dev.siderolabs.io/siderolabs/dvb-m88ds3103
@@ -697,6 +703,7 @@
     - registry.dev.siderolabs.io/siderolabs/nvidia-open-gpu-kernel-modules-lts
     - registry.dev.siderolabs.io/siderolabs/nvidia-open-gpu-kernel-modules-production
   files:
+    - rootfs/usr/lib/modules/*/extras/nvidia-fs.ko
     - rootfs/usr/local/lib/modprobe.d/nvidia.conf
 - images:
     - registry.dev.siderolabs.io/siderolabs/nvidia-container-toolkit-lts
@@ -704,7 +711,7 @@
   files:
     - rootfs/etc/cri/conf.d/10-nvidia-container-runtime.part
     - rootfs/etc/vulkan/icd.d/nvidia_icd.json
-    - rootfs/etc/vulkan/icd.d/nvidia_layers.json
+    - rootfs/etc/vulkan/implicit_layer.d/nvidia_layers.json
     - rootfs/etc/vulkansc/icd.d/nvidia_icd_vksc.json
     - rootfs/usr/bin/nvidia-cdi-hook
     - rootfs/usr/bin/nvidia-ctk
@@ -1294,3 +1301,23 @@
     - rootfs/usr/local/lib/containers/nvidia-fabricmanager/usr/local/sbin/zic
     - rootfs/usr/local/lib/containers/nvidia-fabricmanager/usr/local/share/spdx/glibc.spdx.json
     - rootfs/usr/local/lib/containers/nvidia-fabricmanager/usr/local/share/spdx/zlib-ng.spdx.json
+- images:
+    - registry.dev.siderolabs.io/siderolabs/libvirtd
+    - registry.dev.siderolabs.io/siderolabs/kata-containers
+  files:
+    - rootfs/usr/local/bin/qemu-system-x86_64
+- images:
+    - registry.dev.siderolabs.io/siderolabs/libvirtd
+    - registry.dev.siderolabs.io/siderolabs/multipath-tools
+  files:
+    - rootfs/usr/local/lib/libgcc_s.so.1
+- images:
+    - registry.dev.siderolabs.io/siderolabs/libvirtd
+    - registry.dev.siderolabs.io/siderolabs/zfs
+  files:
+    - rootfs/usr/local/lib/libtirpc.a
+    - rootfs/usr/local/lib/libtirpc.la
+    - rootfs/usr/local/lib/libtirpc.so
+    - rootfs/usr/local/lib/libtirpc.so.3
+    - rootfs/usr/local/lib/libtirpc.so.3.0.0
+    - rootfs/usr/local/lib/pkgconfig/libtirpc.pc

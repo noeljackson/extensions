@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# shellcheck disable=SC2016 # Contract literals intentionally contain workflow expressions.
+# shellcheck disable=SC1003,SC2016 # Contract literals intentionally contain workflow expressions and line continuations.
 
 set -euo pipefail
 
@@ -8,10 +8,13 @@ repo_root="$(cd "${script_dir}/../.." && pwd)"
 workflow="${repo_root}/.github/workflows/downstream-confidential-storage.yml"
 publisher="${script_dir}/publish.sh"
 apt_source_guard="${script_dir}/secure-ubuntu-apt-sources"
+packager="${script_dir}/extension.Dockerfile"
+inputs="${script_dir}/extension-inputs.Dockerfile"
 test_root="$(mktemp -d)"
 
 cleanup() {
-	rm -f -- "${test_root}/candidate.yml" "${test_root}/guard.stderr"
+	rm -f -- "${test_root}/candidate.yml" "${test_root}/candidate.Dockerfile" \
+		"${test_root}/guard.stderr"
 	rm -rf -- "${test_root}/apt-root" "${test_root}/nonubuntu-root"
 	rmdir -- "${test_root}" 2>/dev/null || true
 }
@@ -142,6 +145,46 @@ verify_workflow() {
 		1 'single publish-job GitHub attestation permission' || return 1
 }
 
+# One job builds the exact Kata closure and assembles the extension from an
+# empty tree; nothing reaches the published artifact through another image of
+# the same repository or through a separately published intermediate.
+verify_single_job_assembly() {
+	local candidate_workflow=$1 candidate_packager=$2 candidate_inputs=$3
+	require_order "${candidate_workflow}" \
+		'kata-static "${OUTPUT_ROOT}/kata-static.tar.zst"' \
+		'"${OUTPUT_ROOT}/kata-static.tar.zst" \' \
+		'closure build before extension assembly in the build job' || return 1
+	require_count "${candidate_workflow}" \
+		'          ./hack/codewire-confidential-storage/build.sh \' \
+		2 'closure and extension builds in the build job' || return 1
+	! grep -Eq '^[[:space:]]+_out/confidential-storage/kata-static' "${candidate_workflow}" || {
+		printf 'the Kata closure must not become a separately preserved artifact\n' >&2
+		return 1
+	}
+	! grep -Eq 'releases|gh release|softprops/action-gh-release' "${candidate_workflow}" || {
+		printf 'workflow must not create GitHub releases\n' >&2
+		return 1
+	}
+	[[ "$(grep -E '^FROM ' "${candidate_packager}")" == 'FROM scratch' ]] || {
+		printf 'final extension packager must start from scratch\n' >&2
+		return 1
+	}
+	! grep -E '^FROM[[:space:]]' "${candidate_inputs}" \
+		| grep -Evq '^FROM[[:space:]]+(\$\{[A-Z0-9_]+\}|scratch)([[:space:]]|$)' || {
+		printf 'extension inputs must take every image from the source lock\n' >&2
+		return 1
+	}
+	! grep -Fq 'noeljackson/kata-containers' "${candidate_inputs}" "${candidate_packager}" || {
+		printf 'extension must not be assembled on a previously published Kata extension\n' >&2
+		return 1
+	}
+	! grep -Eq 'kata_talos_extension|base-rootfs\.Dockerfile' \
+		"${script_dir}/build.sh" "${script_dir}/sources.lock.json" || {
+		printf 'retired hand-pushed extension base is still referenced\n' >&2
+		return 1
+	}
+}
+
 verify_publisher() {
 	require_line "${publisher}" \
 		'registry_repository="ghcr.io/noeljackson/kata-containers"' \
@@ -175,7 +218,33 @@ verify_publisher() {
 
 verify_workflow "${workflow}"
 verify_publisher
+verify_single_job_assembly "${workflow}" "${packager}" "${inputs}"
 "${script_dir}/test-qemu-tcg-boot-smoke.sh"
+
+# The extension must never again be layered onto a hand-pushed base image.
+sed 's#^FROM scratch$#FROM ghcr.io/noeljackson/kata-containers@sha256:fe31430b386e55bed7bc88464ae3095f1e9ea467a99305db4f4e4cca4acf1d69#' \
+	"${packager}" >"${test_root}/candidate.Dockerfile"
+if verify_single_job_assembly "${workflow}" "${test_root}/candidate.Dockerfile" "${inputs}" \
+	>/dev/null 2>&1; then
+	printf 'extension packaged on a published base unexpectedly satisfied the contract\n' >&2
+	exit 1
+fi
+sed 's#^FROM \${TALOS_GLIBC_IMAGE} AS talos-glibc$#FROM ghcr.io/siderolabs/glibc:2.44 AS talos-glibc#' \
+	"${inputs}" >"${test_root}/candidate.Dockerfile"
+if verify_single_job_assembly "${workflow}" "${packager}" "${test_root}/candidate.Dockerfile" \
+	>/dev/null 2>&1; then
+	printf 'unlocked extension input image unexpectedly satisfied the contract\n' >&2
+	exit 1
+fi
+
+# The closure is an in-job intermediate, never a second preserved artifact.
+sed 's#^            _out/confidential-storage/kata-extension/kata-extension.oci.tar$#&\n            _out/confidential-storage/kata-static.tar.zst#' \
+	"${workflow}" >"${test_root}/candidate.yml"
+if verify_single_job_assembly "${test_root}/candidate.yml" "${packager}" "${inputs}" \
+	>/dev/null 2>&1; then
+	printf 'preserved Kata closure artifact unexpectedly satisfied the contract\n' >&2
+	exit 1
+fi
 
 mkdir -p "${test_root}/apt-root/etc/apt/sources.list.d"
 cat >"${test_root}/apt-root/etc/apt/sources.list" <<'EOF'

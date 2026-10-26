@@ -7,13 +7,13 @@
   "sources": {
     "extensions": {
       "repository": "https://github.com/noeljackson/extensions",
-      "revision": "0a825ae60fef6838a98edb7bca661d285e0426d9",
-      "tree": "3753e0b7b3a338587ee89b330abe486afad4b41b",
-      "source_date_epoch": 1788458629,
+      "revision": "b21ad13d8ec746ac5cb487ec41edcdd3d3a74a24",
+      "tree": "65b5fd9b2db8e3a3d5603ca6891f0064674a71ca",
+      "source_date_epoch": 1792143623,
       "archive": {
-        "url": "https://codeload.github.com/noeljackson/extensions/tar.gz/0a825ae60fef6838a98edb7bca661d285e0426d9",
-        "sha256": "a0c3408e0de7c5c20438c00ba96ff457f5a73f13cfa09b1ad50d0a7368d14b1a",
-        "sha512": "7a40285b2b867cb328d76ac3ac6ee3ce36e00e021b3ce7f7e2159dc32385599072ab02e1f2bd5e84aae2d124d8a2e6ecb311e9ec750e4017d8552c56ea5d86e4"
+        "url": "https://codeload.github.com/noeljackson/extensions/tar.gz/b21ad13d8ec746ac5cb487ec41edcdd3d3a74a24",
+        "sha256": "05636b9d0bb4c6d21cd850d6ac9f049c4c441b9d3e12e191a78511303cd845f3",
+        "sha512": "af84e1f9fa9f0fc03364231537a0765227cbb762c5eac71f1786c84c4d0098e55f60da54e53b43b6b09b8fbdc3ef4f91054f5425343d5287bf37eb075f89aaf5"
       }
     },
     "guest_components": {
@@ -63,23 +63,32 @@
   },
   "builder": {
     "source": "extensions",
-    "input_tree_sha256": "98ac4b6d805758513670e8b10cdf2a6e2a2cd422b19e57cd1bd97cf17ea607de",
+    "input_tree_sha256": "c4dc13217f8844c8fd9b74022725b20f0e46e6e59e1ef179316b7ff4e2b7fd2c",
     "input_files": {
       ".github/workflows/downstream-confidential-storage.yml": "1a552d04dbbf9a6284a551f5191d5e54fcfda50cab59cd8350caca53bd4fd7f5",
-      "hack/codewire-confidential-storage/base-rootfs.Dockerfile": "b5d07e12cbee83b0992cca3f2e8dee28bac8655cc96bbc1bb989adcadb70f04e",
-      "hack/codewire-confidential-storage/build.sh": "47992f8e9854721e377a02fc3e1d8c653e03dbbde30ef4c638c961c3a3a3140e",
+      "hack/codewire-confidential-storage/build.sh": "291fcd2333064396b3d71a57878f4a449d95ccf3a7fe74be81d0aaa229fd6db6",
+      "hack/codewire-confidential-storage/extension-inputs.Dockerfile": "2030ff1144f5c517ce60a62aeea87cad74f72e63b7236be9104358def1c3587a",
       "hack/codewire-confidential-storage/extension.Dockerfile": "bf4076833de8e2e4e71e7f6030995962ba30c95acb1dd4de5c7f02ac5616bc35",
-      "hack/codewire-confidential-storage/materials.py": "91db51d23d1809856e43d758423b0055c5d591d685857e357e2364543fd36978",
+      "hack/codewire-confidential-storage/extension/10-kata-containers.part": "7620a6a370fa988f07e4fed428c42c076c70e1e04b23c6d2f8dd076e6f7cbc63",
+      "hack/codewire-confidential-storage/extension/config-guest-pulling.toml": "f57bab4239ed00b232e083eefc0798f5548fb7dde3f5b92bdf0f87e632abc966",
+      "hack/codewire-confidential-storage/extension/manifest.yaml.tmpl": "aa4587c2bd91c5eafd1d6d1e756b6412a9d6eeef110c1cbb42b026de44cb8fe4",
+      "hack/codewire-confidential-storage/extension/mount-fuse-nydus-wrapper.go": "c85707b0c883613dce03d40f5fcfe95f9dc0d3fc3f1e63bf7d34219cd1bf12b8",
+      "hack/codewire-confidential-storage/extension/nydus-for-kata-tee.yaml": "475e0ac9fb347f1a3a8ec57d149a383546265886f92eb760fba2d571530b8939",
+      "hack/codewire-confidential-storage/extension/qemu-snp-wrapper.go": "1382e34f0df946bc05960c022f0f0c475a09bcc10f1ce1d02e3edd14a30bcddd",
+      "hack/codewire-confidential-storage/materials.py": "e65c4d147bba11d25ea0d41fbf0915ed5bdec940574782e47892eebc1fc9ce17",
       "hack/codewire-confidential-storage/publish.sh": "d0849a2d6d05193652e09a5570c53642e02b011e03680ed0a95b152a0f81b966",
       "hack/codewire-confidential-storage/qemu-tcg-boot-smoke": "1576ea04e2e61ba4915be027e6e0e8a11605ef7e7b624c2bd664b378dcca937d",
       "hack/codewire-confidential-storage/secure-ubuntu-apt-sources": "9169908ff5fecaf3feb4b5d535ca798a4aca166ced2994dd38b029e8dd47d085",
-      "hack/codewire-confidential-storage/test-publication-contract.sh": "3565226199794009e531a825318457745d4ab37fc047fe2ab651800440672a22",
+      "hack/codewire-confidential-storage/test-publication-contract.sh": "3c1f8a3b4c047cd84ae5a7d0e08e41ccc88e1b8d48e34c173bea20a73bee2bf6",
       "hack/codewire-confidential-storage/test-qemu-tcg-boot-smoke.sh": "54cf24fb487e32bb44546d204c00570736a06fa89d82ad4b8c4c7ca748c82521"
     }
   },
   "base_images": {
     "buildkit_sbom_scanner": "docker.io/docker/buildkit-syft-scanner@sha256:79e7b013cbec16bbb436f312819a49a4a57752b2270c1a9332ae1a10fcc82a68",
-    "kata_talos_extension": "ghcr.io/noeljackson/kata-containers@sha256:fe31430b386e55bed7bc88464ae3095f1e9ea467a99305db4f4e4cca4acf1d69",
+    "go_wrapper_builder": "docker.io/library/golang:1.26.7-alpine3.23@sha256:b17af760035fc2f338eed92d448a6c67f2d45438844fc6c60678fa5f99e44b57",
+    "talos_extensions_validator": "ghcr.io/siderolabs/extensions-validator:c0c37e7@sha256:3737c0e2f22e66382bddcdaab61e305eae453913ad3ba9b6096e96647daae800",
+    "talos_fuse3": "ghcr.io/siderolabs/fuse3:3.18.3@sha256:8b48ce5eaa16d452bafa46a570684325cc807ecb0f4c8351da1a37c52468d6ca",
+    "talos_glibc": "ghcr.io/siderolabs/glibc:2.44@sha256:eb4460f4063253417a21865c0a17e8a6d3b5419e64278e1d564c1d1e55c2d3c8",
     "ubuntu_apt_ca_bootstrap": "docker.io/library/golang:1.26.7-alpine3.23@sha256:b17af760035fc2f338eed92d448a6c67f2d45438844fc6c60678fa5f99e44b57"
   },
   "guest_components_images": {
@@ -182,9 +191,9 @@
         "name": "iscsi-tools",
         "version": "v0.2.0",
         "source_name": "open-iscsi",
-        "source_version": "2.1.11",
-        "source_sha256": "f288d1823b15782432608e5f53723159562e2c44e9a72b40fe15a5ca064ac86a",
-        "source_sha512": "5e7a160e675ce016123f703522758cbbf2ba3be6b97dc73a69b8ff0fe247c6d994c43ca67ebe6f21982bfa22eee27f2d08cbfc502767c0afc127852389411e4d"
+        "source_version": "2.1.13",
+        "source_sha256": "1c3a8ad7d86e57d247a08c013f5055ef695b3a07ed760d1aea7d90b9f9011602",
+        "source_sha512": "58426b50564863cb247016878abf845e86a1a5aabfa723f9cd8d9f49b5f575ce5259f12bd97232c645b795209b70903d857d71bdac2ffc0d33d8bfbc8127ea74"
       },
       {
         "name": "util-linux-tools",
