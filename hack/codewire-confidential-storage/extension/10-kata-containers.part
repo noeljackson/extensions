@@ -1,7 +1,12 @@
+# Each handler forwards only the exact pod annotations Codewire sets
+# (GHSA-37rf-pj8c-g5g3; infra#1654): a forwarded io.katacontainers.* key can
+# override most of the Kata configuration. kata forwards none; kata-clh the
+# agent-policy init-data; kata-qemu-snp the measured init-data, the CoCo
+# agent kernel parameters and the confidential workspace volume.
 [plugins."io.containerd.cri.v1.runtime".containerd.runtimes.kata]
   runtime_type = "io.containerd.kata.v2"
   privileged_without_host_devices = true
-  pod_annotations = ["io.katacontainers.*"]
+  pod_annotations = []
 [plugins."io.containerd.cri.v1.runtime".containerd.runtimes.kata.options]
   ConfigPath = "/usr/local/share/kata-containers/configuration.toml"
 
@@ -9,7 +14,7 @@
 [plugins."io.containerd.cri.v1.runtime".containerd.runtimes.kata-clh]
   runtime_type = "io.containerd.kata.v2"
   privileged_without_host_devices = true
-  pod_annotations = ["io.katacontainers.*"]
+  pod_annotations = ["io.katacontainers.config.hypervisor.cc_init_data"]
 [plugins."io.containerd.cri.v1.runtime".containerd.runtimes.kata-clh.options]
   ConfigPath = "/usr/local/share/kata-containers/configuration.toml"
 
@@ -18,7 +23,7 @@
 [plugins."io.containerd.cri.v1.runtime".containerd.runtimes.kata-qemu-snp]
   runtime_type = "io.containerd.kata-qemu-snp.v2"
   privileged_without_host_devices = true
-  pod_annotations = ["io.katacontainers.*"]
+  pod_annotations = ["io.katacontainers.config.hypervisor.cc_init_data", "io.katacontainers.config.hypervisor.kernel_params", "io.katacontainers.volume.confidential"]
   snapshotter = "nydus-for-kata-tee"
 [plugins."io.containerd.cri.v1.runtime".containerd.runtimes.kata-qemu-snp.options]
   ConfigPath = "/usr/local/share/kata-containers/configuration-qemu-snp.toml"

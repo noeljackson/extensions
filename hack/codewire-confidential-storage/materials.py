@@ -2077,6 +2077,19 @@ CRI_HANDLERS = {
     ),
 }
 
+# The exact pod annotations each handler forwards (GHSA-37rf-pj8c-g5g3,
+# infra#1654). Never a pattern: a forwarded io.katacontainers.* key can
+# override most of the Kata configuration, up to root on the node.
+CRI_POD_ANNOTATIONS = {
+    "kata": [],
+    "kata-clh": ["io.katacontainers.config.hypervisor.cc_init_data"],
+    "kata-qemu-snp": [
+        "io.katacontainers.config.hypervisor.cc_init_data",
+        "io.katacontainers.config.hypervisor.kernel_params",
+        "io.katacontainers.volume.confidential",
+    ],
+}
+
 
 def verify_cri_handlers(data: bytes) -> None:
     """Bind each containerd runtime handler to its exact Kata configuration."""
@@ -2108,6 +2121,13 @@ def verify_cri_handlers(data: bytes) -> None:
         ):
             raise MaterialError(
                 f"Kata extension CRI handler {handler} is not bound to {config}"
+            )
+        if (
+            runtime.get("pod_annotations") != CRI_POD_ANNOTATIONS[handler]
+            or "container_annotations" in runtime
+        ):
+            raise MaterialError(
+                f"Kata extension CRI handler {handler} forwards unreviewed annotations"
             )
     proxy = cri.get("proxy_plugins", {}).get("nydus-for-kata-tee")
     if not isinstance(proxy, dict) or proxy.get("address") != (

@@ -1720,6 +1720,23 @@ agent_name = "kata"
                     part.split(b"[proxy_plugins.", 1)[0],
                     "nydus-for-kata-tee snapshotter",
                 ),
+                (
+                    "wildcard-annotations",
+                    part.replace(
+                        b'pod_annotations = []',
+                        b'pod_annotations = ["io.katacontainers.*"]',
+                    ),
+                    "kata forwards unreviewed annotations",
+                ),
+                (
+                    "unreviewed-annotation",
+                    part.replace(
+                        b'pod_annotations = ["io.katacontainers.config.hypervisor.cc_init_data"]',
+                        b'pod_annotations = ["io.katacontainers.config.hypervisor.cc_init_data", '
+                        b'"io.katacontainers.config.hypervisor.kernel_params"]',
+                    ),
+                    "kata-clh forwards unreviewed annotations",
+                ),
             ]
             for name, replacement, expected in cases:
                 with self.subTest(name=name):
