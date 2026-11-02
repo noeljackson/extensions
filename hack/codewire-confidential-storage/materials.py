@@ -1370,6 +1370,14 @@ def prepare_kata(
             "select the architecture-qualified guest-components container tag",
         ),
         replace_once(
+            output / "tools/packaging/static-build/qemu/build-base-qemu.sh",
+            '\t"${packaging_dir}" \\\n\t-f "${script_dir}/Dockerfile" \\\n',
+            '\t"${script_dir}" \\\n\t-f "${script_dir}/Dockerfile" \\\n',
+            "build the QEMU builder image from its own directory: its Dockerfile "
+            "copies nothing, and the packaging tree holds the parallel kernel "
+            "build's root-owned output",
+        ),
+        replace_once(
             output / "tools/osbuilder/rootfs-builder/ubuntu/config.sh",
             'PACKAGES+=" cryptsetup-bin e2fsprogs"',
             'PACKAGES+=" cryptsetup-bin dmsetup e2fsprogs"',
@@ -1546,6 +1554,17 @@ def verify_prepared_kata(lock: dict[str, Any], repo: Path) -> None:
     if dockerfile.count("source_file=/etc/apt/sources.list.d/ubuntu.sources") != 1:
         raise MaterialError(
             "prepared Kata rootfs builder lacks the fail-closed HTTPS source gate"
+        )
+    qemu_builder = (
+        repo / "tools/packaging/static-build/qemu/build-base-qemu.sh"
+    ).read_text(encoding="utf-8")
+    if (
+        '"${packaging_dir}" \\\n' in qemu_builder
+        or qemu_builder.count('\t"${script_dir}" \\\n\t-f "${script_dir}/Dockerfile" \\\n')
+        != 1
+    ):
+        raise MaterialError(
+            "prepared Kata QEMU builder image does not build from its own directory"
         )
     rootfs_builder = (repo / "tools/osbuilder/rootfs-builder/rootfs.sh").read_text(
         encoding="utf-8"
