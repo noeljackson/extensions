@@ -234,7 +234,7 @@
       "src/runtime-rs/crates/resource/src/volume/utils.rs": "ef84b75faf00fce5b97420c329a3936b156a6b33db08227f020dc6afa32328a6",
       "src/runtime-rs/crates/runtimes/common/src/types/trans_from_shim.rs": "42e148bf864bf06c0e48f18168125aeb9b723e511f8d7c7ec8de6a264f4074bb",
       "src/runtime-rs/crates/runtimes/virt_container/src/container_manager/confidential_volume.rs": "fa15c17b68ab46f6329d829e3ce74f1df169b9a8dea84197871c03eca3aeb261",
-      "src/runtime-rs/crates/runtimes/virt_container/src/container_manager/container.rs": "f0ef6390783c8fc634f7416b7e4c4d9f5aceb32ff53a4c6fdeebe14b0171b034",
+      "src/runtime-rs/crates/runtimes/virt_container/src/container_manager/container.rs": "11c00030f03a0561bbdb853b213471a349f2212bfb3ab7c427a609cc9e6d7e82",
       "src/runtime-rs/crates/runtimes/virt_container/src/container_manager/mod.rs": "325ac4e8f621d07df62bfde22411678e53b91e09ad163ca09bb5d6ee8ac3bc69",
       "src/tools/genpolicy/rules.rego": "dba4946e95355bd8a1752950c0e0df3abfa93912f4856128e82832831710b3e3",
       "src/tools/genpolicy/src/policy.rs": "7a58bbb955e0682e345d66e8bb0f0553af3e6f56528aa5254391c7351cb6ea1c",
@@ -245,7 +245,7 @@
       "tools/packaging/kata-deploy/local-build/Makefile": "9e4923305459feb86e230b27395f6521734565d5e67e7e9338bff384b42685ba",
       "tools/packaging/kata-deploy/local-build/kata-deploy-binaries.sh": "45546f7293f2e1bfda9888707e324a1cac615fd5ff9270c14ab42ed7bbe7165c",
       "tools/packaging/kata-deploy/local-build/kata-deploy-build-components-tarballs.sh": "12a15b8621af0e7c5476e09987c9e76179d0edce74f0083cc15ff87d8dbf0698",
-      "versions.yaml": "84c8e7f9b90a754ae30c7efa6013429343f2381b4c4bcb3c29cadda06a8d132e"
+      "versions.yaml": "0851f51f98577237d9647213cfabee03bc17dd528c181ac0a95b8410359aa107"
     },
     "required_packages": [
       "cryptsetup-bin",
