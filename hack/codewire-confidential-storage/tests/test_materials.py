@@ -1093,6 +1093,30 @@ class MaterialTests(unittest.TestCase):
                     "guest tool closure",
                 )
 
+    def test_prepare_kata_refuses_a_drifted_contract_file(self) -> None:
+        # The locked source revision is exact, but a contract hash recorded
+        # for an earlier revision no longer matches its file.
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "source"
+            self._init_repo(source)
+            path = source / "versions.yaml"
+            path.write_text("kernel: v7.2.15\n", encoding="utf-8")
+            self._commit_all(source)
+
+            lock = copy.deepcopy(self.lock)
+            self._bind_test_repo(lock, "kata_containers", source)
+            lock["kata_build_contract"]["input_files"] = {
+                "versions.yaml": hashlib.sha256(b"kernel: v7.2.2\n").hexdigest()
+            }
+            lock_path = root / "lock.json"
+            self._write_lock(lock_path, lock)
+            with self.assertRaisesRegex(
+                materials.MaterialError,
+                "Kata build contract input drift for versions.yaml",
+            ):
+                materials.prepare_kata(lock_path, lock, source, root / "prepared")
+
     def test_yaml_asset_binding_rejects_ambiguous_contract(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "versions.yaml"

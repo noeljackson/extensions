@@ -108,6 +108,10 @@ Commands:
       Print the exact non-publishing build plan.
   prepare-kata KATA_REPOSITORY OUTPUT_DIRECTORY
       Copy and prepare the exact Kata source with the accepted guest/tool inputs.
+  verify-kata-source
+      Fetch the locked Kata revision and prepare it in scratch, so a drifted
+      build-contract file or a source edit that no longer applies fails before
+      a build.
   kata-static OUTPUT_TARBALL [KATA_REPOSITORY]
       Build the exact amd64 Kata static tarball. Registry caches and pushes are disabled.
   kata-guest-components OUTPUT_TARBALL [KATA_REPOSITORY]
@@ -933,6 +937,19 @@ case "$command" in
     [[ $# -eq 3 ]] || die "prepare-kata requires KATA_REPOSITORY OUTPUT_DIRECTORY"
     verify_builder_checkout
     python3 "$materials_tool" --lock "$lock_file" prepare-kata --repo "$2" --output "$3"
+    ;;
+
+  verify-kata-source)
+    [[ $# -eq 1 ]] || die "verify-kata-source takes no arguments"
+    verify_builder_checkout
+    require_command git
+    require_command jq
+    require_command python3
+    work_dir="$(new_work_dir)"
+    trap 'cleanup_or_retain_work_dir "${work_dir:-}"' EXIT
+    checkout_locked_source kata_containers "$work_dir/kata-source"
+    python3 "$materials_tool" --lock "$lock_file" prepare-kata \
+      --repo "$work_dir/kata-source" --output "$work_dir/kata-prepared"
     ;;
 
   kata-static)

@@ -43,6 +43,8 @@ jobs:
         run: ./hack/codewire-confidential-storage/test-publication-contract.sh
       - name: Verify the exact source and builder lock
         run: ./hack/codewire-confidential-storage/build.sh verify
+      - name: Prepare the locked Kata source against the build contract
+        run: ./hack/codewire-confidential-storage/build.sh verify-kata-source
       - name: Verify the non-publishing build plan
         run: ./hack/codewire-confidential-storage/build.sh plan
       - name: Run focused material tests

@@ -63,10 +63,10 @@
   },
   "builder": {
     "source": "extensions",
-    "input_tree_sha256": "c4dc13217f8844c8fd9b74022725b20f0e46e6e59e1ef179316b7ff4e2b7fd2c",
+    "input_tree_sha256": "47369b3cfc15dadcf041acc63aa7b63fd6045106480980d76d3c812ad4a45cac",
     "input_files": {
-      ".github/workflows/downstream-confidential-storage.yml": "1a552d04dbbf9a6284a551f5191d5e54fcfda50cab59cd8350caca53bd4fd7f5",
-      "hack/codewire-confidential-storage/build.sh": "291fcd2333064396b3d71a57878f4a449d95ccf3a7fe74be81d0aaa229fd6db6",
+      ".github/workflows/downstream-confidential-storage.yml": "4a67d37c9e71ff2f6ab02d74a863cc2a78eaa1178f9a7d013ff68049b91b619b",
+      "hack/codewire-confidential-storage/build.sh": "1925787fa01ea50c735348cd68b8bec2900b73ea73b0cd93cecccfa11783073f",
       "hack/codewire-confidential-storage/extension-inputs.Dockerfile": "2030ff1144f5c517ce60a62aeea87cad74f72e63b7236be9104358def1c3587a",
       "hack/codewire-confidential-storage/extension.Dockerfile": "bf4076833de8e2e4e71e7f6030995962ba30c95acb1dd4de5c7f02ac5616bc35",
       "hack/codewire-confidential-storage/extension/10-kata-containers.part": "7620a6a370fa988f07e4fed428c42c076c70e1e04b23c6d2f8dd076e6f7cbc63",
@@ -79,7 +79,7 @@
       "hack/codewire-confidential-storage/publish.sh": "d0849a2d6d05193652e09a5570c53642e02b011e03680ed0a95b152a0f81b966",
       "hack/codewire-confidential-storage/qemu-tcg-boot-smoke": "1576ea04e2e61ba4915be027e6e0e8a11605ef7e7b624c2bd664b378dcca937d",
       "hack/codewire-confidential-storage/secure-ubuntu-apt-sources": "9169908ff5fecaf3feb4b5d535ca798a4aca166ced2994dd38b029e8dd47d085",
-      "hack/codewire-confidential-storage/test-publication-contract.sh": "3c1f8a3b4c047cd84ae5a7d0e08e41ccc88e1b8d48e34c173bea20a73bee2bf6",
+      "hack/codewire-confidential-storage/test-publication-contract.sh": "c4cd522fe48e97132df92ada3c90f703de899e7fa41bd790392e05bbd683c52c",
       "hack/codewire-confidential-storage/test-qemu-tcg-boot-smoke.sh": "54cf24fb487e32bb44546d204c00570736a06fa89d82ad4b8c4c7ca748c82521"
     }
   },
