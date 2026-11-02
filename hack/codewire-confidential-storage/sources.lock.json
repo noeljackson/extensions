@@ -63,7 +63,7 @@
   },
   "builder": {
     "source": "extensions",
-    "input_tree_sha256": "47369b3cfc15dadcf041acc63aa7b63fd6045106480980d76d3c812ad4a45cac",
+    "input_tree_sha256": "1d65d1cb67d942d776e6688a21c6fc8866b422e9e0d24757057afd08c03c7abe",
     "input_files": {
       ".github/workflows/downstream-confidential-storage.yml": "4a67d37c9e71ff2f6ab02d74a863cc2a78eaa1178f9a7d013ff68049b91b619b",
       "hack/codewire-confidential-storage/build.sh": "1925787fa01ea50c735348cd68b8bec2900b73ea73b0cd93cecccfa11783073f",
@@ -75,7 +75,7 @@
       "hack/codewire-confidential-storage/extension/mount-fuse-nydus-wrapper.go": "c85707b0c883613dce03d40f5fcfe95f9dc0d3fc3f1e63bf7d34219cd1bf12b8",
       "hack/codewire-confidential-storage/extension/nydus-for-kata-tee.yaml": "475e0ac9fb347f1a3a8ec57d149a383546265886f92eb760fba2d571530b8939",
       "hack/codewire-confidential-storage/extension/qemu-snp-wrapper.go": "1382e34f0df946bc05960c022f0f0c475a09bcc10f1ce1d02e3edd14a30bcddd",
-      "hack/codewire-confidential-storage/materials.py": "e65c4d147bba11d25ea0d41fbf0915ed5bdec940574782e47892eebc1fc9ce17",
+      "hack/codewire-confidential-storage/materials.py": "955d2a3db19779b16012ecb03fc7dd4bc34b467ac854e4260971ed99d8bf0565",
       "hack/codewire-confidential-storage/publish.sh": "d0849a2d6d05193652e09a5570c53642e02b011e03680ed0a95b152a0f81b966",
       "hack/codewire-confidential-storage/qemu-tcg-boot-smoke": "1576ea04e2e61ba4915be027e6e0e8a11605ef7e7b624c2bd664b378dcca937d",
       "hack/codewire-confidential-storage/secure-ubuntu-apt-sources": "9169908ff5fecaf3feb4b5d535ca798a4aca166ced2994dd38b029e8dd47d085",
@@ -245,6 +245,7 @@
       "tools/packaging/kata-deploy/local-build/Makefile": "9e4923305459feb86e230b27395f6521734565d5e67e7e9338bff384b42685ba",
       "tools/packaging/kata-deploy/local-build/kata-deploy-binaries.sh": "45546f7293f2e1bfda9888707e324a1cac615fd5ff9270c14ab42ed7bbe7165c",
       "tools/packaging/kata-deploy/local-build/kata-deploy-build-components-tarballs.sh": "12a15b8621af0e7c5476e09987c9e76179d0edce74f0083cc15ff87d8dbf0698",
+      "tools/packaging/static-build/qemu/build-base-qemu.sh": "0a03ccd8141a01a8fb5b38fa6a7676aa9e774e4fdb564052113b0c37b40d74e3",
       "versions.yaml": "0851f51f98577237d9647213cfabee03bc17dd528c181ac0a95b8410359aa107"
     },
     "required_packages": [

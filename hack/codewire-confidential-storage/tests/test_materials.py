@@ -861,6 +861,14 @@ class MaterialTests(unittest.TestCase):
                 "tools/packaging/static-build/coco-guest-components/Dockerfile": "FROM scratch\n",
                 "tools/packaging/static-build/coco-guest-components/build-static-coco-guest-components.sh": "test\n",
                 "tools/packaging/static-build/coco-guest-components/build.sh": "test\n",
+                "tools/packaging/static-build/qemu/build-base-qemu.sh": (
+                    'packaging_dir="${script_dir}/../.."\n'
+                    '"${container_engine}" pull "${container_image}" || '
+                    '("${container_engine}" build \\\n'
+                    '\t"${packaging_dir}" \\\n'
+                    '\t-f "${script_dir}/Dockerfile" \\\n'
+                    '\t-t "${container_image}")\n'
+                ),
             }
             for relative, content in files.items():
                 path = source / relative
@@ -910,6 +918,14 @@ class MaterialTests(unittest.TestCase):
                 'echo "${image}:${version}-${variant}"',
                 packaging.read_text(encoding="utf-8"),
             )
+            qemu_builder = (
+                output / "tools/packaging/static-build/qemu/build-base-qemu.sh"
+            ).read_text(encoding="utf-8")
+            self.assertIn(
+                '\t"${script_dir}" \\\n\t-f "${script_dir}/Dockerfile" \\\n',
+                qemu_builder,
+            )
+            self.assertNotIn('"${packaging_dir}" \\\n', qemu_builder)
             self.assertIn(
                 'PACKAGES+=" cryptsetup-bin dmsetup e2fsprogs"',
                 (output / "tools/osbuilder/rootfs-builder/ubuntu/config.sh").read_text(
