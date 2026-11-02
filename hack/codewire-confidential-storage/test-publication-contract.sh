@@ -88,6 +88,9 @@ verify_workflow() {
 		'./hack/codewire-confidential-storage/qemu-tcg-boot-smoke' \
 		'exact archive boot gate' || return 1
 	require_line "${candidate}" \
+		'        run: ./hack/codewire-confidential-storage/build.sh verify-kata-source' \
+		'pull-request Kata source preparation gate' || return 1
+	require_line "${candidate}" \
 		'    needs: build' \
 		'publication dependency on the verified build' || return 1
 	require_text "${candidate}" \
@@ -311,6 +314,14 @@ sed '/      - downstream\/confidential-storage$/a\      - downstream/confidentia
 	"${workflow}" >"${test_root}/candidate.yml"
 if verify_workflow "${test_root}/candidate.yml" >/dev/null 2>&1; then
 	printf 'source-branch publication fixture unexpectedly satisfied the contract\n' >&2
+	exit 1
+fi
+
+# A source-lock bump must prepare the locked Kata source at pull-request time,
+# not first in the publishing build.
+sed '/build.sh verify-kata-source$/d' "${workflow}" >"${test_root}/candidate.yml"
+if verify_workflow "${test_root}/candidate.yml" >/dev/null 2>&1; then
+	printf 'workflow without the Kata source preparation gate unexpectedly satisfied the contract\n' >&2
 	exit 1
 fi
 
