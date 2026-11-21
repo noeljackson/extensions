@@ -39,8 +39,8 @@ class MaterialTests(unittest.TestCase):
                 "1c37325fcb48e6f1b04f94c0fa50f9f8afd91d60",
             ),
             "kata_containers": (
-                "7ffba19210b343b37e0c8e2f3cab9620e2e1f7e7",
-                "8334581ba1802372eec39748ea46b4a3a6cb38da",
+                "5bcc5212baf53695c4db6c9fe63a8ed3a1ae4ddf",
+                "fa37b6cb4dff4dc0ebb3a6c8d2854e41bb4f76ed",
             ),
             "trustee": (
                 "bc76377e5a694d03a122ecf3f8272a0889dd9371",
@@ -1179,7 +1179,7 @@ class MaterialTests(unittest.TestCase):
                 )
                 text = (first / name).read_text(encoding="utf-8")
                 self.assertNotRegex(text.lower(), r"password|private_key|admin_token")
-                self.assertIn("7ffba19210b343b37e0c8e2f3cab9620e2e1f7e7", text)
+                self.assertIn("5bcc5212baf53695c4db6c9fe63a8ed3a1ae4ddf", text)
             provenance = json.loads(
                 (first / "provenance.in-toto.json").read_text(encoding="utf-8")
             )

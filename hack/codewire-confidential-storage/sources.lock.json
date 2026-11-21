@@ -3,7 +3,7 @@
   "platforms": [
     "linux/amd64"
   ],
-  "source_date_epoch": 1793643389,
+  "source_date_epoch": 1795208451,
   "sources": {
     "extensions": {
       "repository": "https://github.com/noeljackson/extensions",
@@ -29,13 +29,13 @@
     },
     "kata_containers": {
       "repository": "https://github.com/noeljackson/kata-containers",
-      "revision": "7ffba19210b343b37e0c8e2f3cab9620e2e1f7e7",
-      "tree": "8334581ba1802372eec39748ea46b4a3a6cb38da",
-      "source_date_epoch": 1793643389,
+      "revision": "5bcc5212baf53695c4db6c9fe63a8ed3a1ae4ddf",
+      "tree": "fa37b6cb4dff4dc0ebb3a6c8d2854e41bb4f76ed",
+      "source_date_epoch": 1795208451,
       "archive": {
-        "url": "https://codeload.github.com/noeljackson/kata-containers/tar.gz/7ffba19210b343b37e0c8e2f3cab9620e2e1f7e7",
-        "sha256": "e6608d4e4310d72cc207c8a7680ee40277b66f1820062c866c3d1adf8f279baf",
-        "sha512": "530053e734d0c98a0d15eff71cec091e790a71cf25005c5d82e2a1f258c4b6248eca215b8c44d753a1bec92706302942f1039835a74a26616d3a7d702e219422"
+        "url": "https://codeload.github.com/noeljackson/kata-containers/tar.gz/5bcc5212baf53695c4db6c9fe63a8ed3a1ae4ddf",
+        "sha256": "bce2a5b38d42811131f47ca2c0acc09f337bf5eeee79f7771c3bb1b66c9c318c",
+        "sha512": "3cd8b43f830bd586226218592fece096f8275381481b1ba49a6d8b80c1119df47cd635eb515fbf036cf0470f755b9d77ea3b099b0fb7529a7675ddd421314e8c"
       }
     },
     "trustee": {
@@ -217,7 +217,7 @@
       "ci/install_libseccomp.sh": "3e0ffc7f8a78b3bb787397abd119a558ff4e3e1ea74383ed3147953ff875b6b4",
       "src/agent/src/confidential_data_hub/mod.rs": "120d35084291319e50a18ee1cc4fd98d5e741b3f885dc78b55441e30daaf36a5",
       "src/agent/src/device/mod.rs": "203e2aae0d1d439922c6793902355d56ec187fce18cb279e0075c62a018a2c83",
-      "src/agent/src/rpc.rs": "4391532f59d30bedbd94ea8b181631b8ba2ec688dcf7b4d2a5dd9194d00e29a0",
+      "src/agent/src/rpc.rs": "2dc747f0d13fa871051924c9a1fdd473e9be531ef75fe8f57d6d649ba8e1e440",
       "src/agent/src/sandbox.rs": "1dca37507a9037bced9ef04bc1e1b04b986bcee23be61ddf917a68aa8ec1e9d0",
       "src/agent/src/storage/block_handler.rs": "e628bdd0dae58261f3b7892839561fd1aa1379524336281ad66b0b55f57e1ee7",
       "src/agent/src/storage/mod.rs": "a2f5a2600c2d78178b9a7590cb6ad2748e371873f1d69155edc2c8ee560d3968",
