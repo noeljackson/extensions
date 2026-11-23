@@ -3,7 +3,7 @@
   "platforms": [
     "linux/amd64"
   ],
-  "source_date_epoch": 1795340560,
+  "source_date_epoch": 1795396999,
   "sources": {
     "extensions": {
       "repository": "https://github.com/noeljackson/extensions",
@@ -18,13 +18,13 @@
     },
     "guest_components": {
       "repository": "https://github.com/noeljackson/guest-components",
-      "revision": "a793932e8fc98a42f673d38dbb1981edacb61db6",
-      "tree": "1c37325fcb48e6f1b04f94c0fa50f9f8afd91d60",
-      "source_date_epoch": 1788554972,
+      "revision": "1f7392ac8e47a9246d6213bb9014f9afbd7ba16a",
+      "tree": "f13a1f8af47d1fc7121de9fbf5f4c1e9945cc548",
+      "source_date_epoch": 1795396999,
       "archive": {
-        "url": "https://codeload.github.com/noeljackson/guest-components/tar.gz/a793932e8fc98a42f673d38dbb1981edacb61db6",
-        "sha256": "9c1839a72062a84538db0ae9978c0545ec9c7983a7fd1a4f37ee49cd86d40e89",
-        "sha512": "08a8e9a41506e7141e29340ff5c53fd1ac53488cab1e97823858b3d9a3bd713176c20013dafbbf563aadd4d0bab99fdf9a1751699c998710af39f4c521160165"
+        "url": "https://codeload.github.com/noeljackson/guest-components/tar.gz/1f7392ac8e47a9246d6213bb9014f9afbd7ba16a",
+        "sha256": "4069426e30a63319524e0bffb748c34a04a1302d8a56439365a501b483d273cd",
+        "sha512": "925dc9ecb117a7eb77043bd9c2e08a5035df3749a3950bfd73137e8d28e8f456b354a557aefa46fa3bb2718c2a8c2117a55ae7471ed58f0c100de707884fe2f1"
       }
     },
     "kata_containers": {
@@ -93,8 +93,8 @@
   },
   "guest_components_images": {
     "container": {
-      "reference": "ghcr.io/noeljackson/guest-components/coco-extension@sha256:1c2826f3a09a2ae3469f045755ea9fb75918ec32c384ff4d02615d790d672adc",
-      "published_tag": "a793932e8fc98a42f673d38dbb1981edacb61db6-ubuntu26.04-amd64",
+      "reference": "ghcr.io/noeljackson/guest-components/coco-extension@sha256:d12f28b369a5d2f131d35d209c06155cf1d8a23f1e830e643c18e21a3e6a22d3",
+      "published_tag": "1f7392ac8e47a9246d6213bb9014f9afbd7ba16a-ubuntu26.04-amd64",
       "platform": "linux/amd64",
       "source": "guest_components",
       "dockerfile": "tools/coco-extension/Dockerfile",
@@ -105,18 +105,18 @@
       },
       "attestations": {
         "provenance": {
-          "manifest": "sha256:8a2a44410c9d58ba0f6045bee79ab0fcbc0a5bf39c786e67ab4ed492d24a9e1d",
-          "bundle": "sha256:aac09b5928e99e53ceeb7d3322dc28654fd0896a092da96e58e3422990fc519c"
+          "manifest": "sha256:704ddbcb846dee17df0b8872b6d900e91ae528a173ad177a1364b3472bb277dc",
+          "bundle": "sha256:790509cb3fe42f1abd0aa119a428eb0926309390a6418b3a411d721c7e2e04f1"
         },
         "sbom": {
-          "manifest": "sha256:78bef891a350093fde4ca325eb5e96d0810151956d5ffad45a6e923d6a123de1",
-          "bundle": "sha256:a6450607af10d794ab3c7d9f689516962fced76bc45be38ba8fa548dabeb91a9"
+          "manifest": "sha256:1993b066ec9cc20d57de38293fcc04f6e23d578931282699c8211337b65dada3",
+          "bundle": "sha256:6a9ce39dead8a83fa657f7a8564e46b65331449d73a0513fe898e2f5dfa89410"
         }
       }
     },
     "disk": {
-      "reference": "ghcr.io/noeljackson/guest-components/coco-extension-disk@sha256:39891354cf96cf5e2b0f62b5ce657b0cadc099642fce811ade001c2fcb7705c8",
-      "published_tag": "a793932e8fc98a42f673d38dbb1981edacb61db6-ubuntu26.04-amd64",
+      "reference": "ghcr.io/noeljackson/guest-components/coco-extension-disk@sha256:bab1cfec5e412d5da23fdca6a2cd8db291b7e5bb7526eb3c20594db652b7e138",
+      "published_tag": "1f7392ac8e47a9246d6213bb9014f9afbd7ba16a-ubuntu26.04-amd64",
       "platform": "linux/amd64",
       "source": "guest_components",
       "dockerfile": "tools/coco-extension/build-erofs-image.sh",
@@ -127,8 +127,8 @@
       },
       "attestations": {
         "provenance": {
-          "manifest": "sha256:293d02f26aa2fcc40f20048b3682230e0fbcc1c4b7199f026b138601d5813ac8",
-          "bundle": "sha256:135263c404b4d766d4835b1e9e1ed8d52ec50c96857f3a54168ecc4c0d100588"
+          "manifest": "sha256:715e4ec3bddcf05a0fbeb89e423daa4582bfcc691e1ad69429baafc758506dc2",
+          "bundle": "sha256:da86865a5648e758cbdcc0228ec12d31df30416851b9b8fd682ee25723f18cab"
         }
       }
     }
